@@ -6,6 +6,8 @@
 #if LANG_CPP
 # if FP_BACKEND == FP_BACKEND_DWRITE
 #  include "dwrite/font_provider_dwrite.cpp"
+# elif FP_BACKEND == FP_BACKEND_FREETYPE
+#  include "freetype/font_provider_freetype.cpp"
 # else
 #  error Font provider backend not specified.
 # endif

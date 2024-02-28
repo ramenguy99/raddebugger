@@ -29,12 +29,13 @@ cd /D "%~dp0"
 for %%a in (%*) do set "%%a=1"
 if not "%msvc%"=="1" if not "%clang%"=="1" set msvc=1
 if not "%release%"=="1" set debug=1
-if "%debug%"=="1"   set release=0 && echo [debug mode]
-if "%release%"=="1" set debug=0 && echo [release mode]
-if "%msvc%"=="1"    set clang=0 && echo [msvc compile]
-if "%clang%"=="1"   set msvc=0 && echo [clang compile]
-if "%opengl%"=="1"  echo [opengl backend]
-if "%~1"==""        echo [default mode, assuming `raddbg` build] && set raddbg=1
+if "%debug%"=="1"    set release=0 && echo [debug mode]
+if "%release%"=="1"  set debug=0 && echo [release mode]
+if "%msvc%"=="1"     set clang=0 && echo [msvc compile]
+if "%clang%"=="1"    set msvc=0 && echo [clang compile]
+if "%opengl%"=="1"   echo [opengl backend]
+if "%freetype%"=="1" echo [freetype]
+if "%~1"==""         echo [default mode, assuming `raddbg` build] && set raddbg=1
 
 :: --- Unpack Command Line Build Arguments ------------------------------------
 set auto_compile_flags=
@@ -86,8 +87,14 @@ popd
 :: --- Get Current Git Commit Id ----------------------------------------------
 for /f %%i in ('call git describe --always --dirty') do set compile=%compile% -DBUILD_GIT_HASH=\"%%i\"
 
-:: --- Set rendering backend -----------------------------------------------
+:: --- Set rendering backend --------------------------------------------------
 if "%opengl%"=="1" set compile=%compile% -DR_BACKEND=2 -DBUILD_RENDERING_BACKEND=\"OpenGL\"
+
+:: --- Set font backend -------------------------------------------------------
+if "%freetype%"=="1" (
+  set compile=%compile% -DFP_BACKEND=2 -I"..\..\freetype-windows-binaries\include"
+  set compile_link=%compile_link% -LIBPATH:"..\..\freetype-windows-binaries\release static\vs2015-2022\win64" freetype.lib -ignore:4099
+)
 
 :: --- Build & Run Metaprogram ------------------------------------------------
 if "%no_meta%"=="1" echo [skipping metagen]

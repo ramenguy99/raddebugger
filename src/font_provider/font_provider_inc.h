@@ -8,6 +8,7 @@
 //~ rjf: Backend Constants
 
 #define FP_BACKEND_DWRITE 1
+#define FP_BACKEND_FREETYPE 2
 
 ////////////////////////////////
 //~ rjf: Decide On Backend
@@ -27,6 +28,8 @@
 #if LANG_CPP
 # if FP_BACKEND == FP_BACKEND_DWRITE
 #  include "dwrite/font_provider_dwrite.h"
+# elif FP_BACKEND == FP_BACKEND_FREETYPE
+#  include "freetype/font_provider_freetype.h"
 # else
 #  error Font provider backend not specified.
 # endif
