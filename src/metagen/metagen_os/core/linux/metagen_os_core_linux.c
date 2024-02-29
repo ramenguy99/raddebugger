@@ -2,6 +2,7 @@
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
 #include <stdio.h>
+#include <stdbool.h>
 
 ////////////////////////////////
 //~ rjf: Globals
@@ -801,7 +802,7 @@ lnx_thread_base(void *ptr){
 }
 
 internal void
-lnx_safe_call_sig_handler(int){
+lnx_safe_call_sig_handler(int _unused){
   LNX_SafeCallChain *chain = lnx_safe_call_chain;
   if (chain != 0 && chain->fail_handler != 0){
     chain->fail_handler(chain->ptr);
@@ -840,7 +841,7 @@ os_init(int argc, char **argv)
   lnx_perm_arena = perm_arena;
   
   // NOTE(allen): Initialize Paths
-  lnx_initial_path = os_get_path(lnx_perm_arena, OS_SystemPath_Current);
+  lnx_initial_path = str8_lit("."); // os_get_path(lnx_perm_arena, OS_SystemPath_Current); what?
   
   // NOTE(rjf): Setup command line args
   lnx_cmd_line_args = os_string_list_from_argcv(lnx_perm_arena, argc, argv);
@@ -885,7 +886,7 @@ os_release(void *ptr, U64 size){
   munmap(ptr, size);
 }
 
-internal void
+internal B32
 os_set_large_pages(B32 flag)
 {
   NotImplemented;
@@ -894,7 +895,6 @@ os_set_large_pages(B32 flag)
 internal B32
 os_large_pages_enabled(void)
 {
-  NotImplemented;
   return 0;
 }
 
@@ -923,6 +923,8 @@ os_free_ring_buffer(void *ring_buffer, U64 actual_size)
 
 internal String8
 os_machine_name(void){
+  return str8_lit("Linux machine");
+  /*
   local_persist B32 first = true;
   local_persist String8 name = {0};
   
@@ -961,6 +963,7 @@ os_machine_name(void){
   pthread_mutex_unlock(&lnx_mutex);
   
   return(name);
+  */
 }
 
 internal U64
@@ -973,7 +976,7 @@ internal U64
 os_allocation_granularity(void)
 {
   // On linux there is no equivalent of "dwAllocationGranularity"
-  os_page_size();
+  return os_page_size();
 }
 
 internal U64
@@ -1040,7 +1043,7 @@ os_string_list_from_system_path(Arena *arena, OS_SystemPath path, String8List *o
         for (S64 cap = PATH_MAX, r = 0;
              r < 4;
              cap *= 2, r += 1){
-          scratch.restore();
+          scratch_end(scratch);
           buffer = push_array_no_zero(scratch.arena, U8, cap);
           size = readlink("/proc/self/exe", (char*)buffer, cap);
           if (size < cap){
@@ -1052,7 +1055,7 @@ os_string_list_from_system_path(Arena *arena, OS_SystemPath path, String8List *o
         // save string
         if (got_final_result && size > 0){
           String8 full_name = str8(buffer, size);
-          String8 name_chopped = string_path_chop_last_slash(full_name);
+          String8 name_chopped = str8_chop_last_slash(full_name);
           name = push_str8_copy(lnx_perm_arena, name_chopped);
         }
         
@@ -1167,7 +1170,7 @@ os_delete_file_at_path(String8 path)
 {
   Temp scratch = scratch_begin(0, 0);
   B32 result = false;
-  String8 name_copy = push_str8_copy(scratch.arena, name);
+  String8 name_copy = push_str8_copy(scratch.arena, path);
   if (remove((char*)name_copy.str) != -1){
     result = true;
   }
@@ -1256,7 +1259,7 @@ os_make_directory(String8 path)
 {
   Temp scratch = scratch_begin(0, 0);
   B32 result = false;
-  String8 name_copy = push_str8_copy(scratch.arena, name);
+  String8 name_copy = push_str8_copy(scratch.arena, path);
   if (mkdir((char*)name_copy.str, 0777) != -1){
     result = true;
   }
@@ -1372,7 +1375,7 @@ os_sleep_milliseconds(U32 msec){
 //~ rjf: @os_hooks Child Processes (Implemented Per-OS)
 
 internal B32
-os_launch_process(OS_LaunchOptions *options){
+os_launch_process(OS_LaunchOptions *options, OS_Handle *handle_out){
   // TODO(allen): I want to redo this API before I bother implementing it here
   NotImplemented;
   return(false);
@@ -1406,7 +1409,7 @@ os_launch_thread(OS_ThreadFunctionType *func, void *ptr, void *params){
 
 internal void
 os_release_thread_handle(OS_Handle thread){
-  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(thread.id);
+  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(thread.u64[0]);
   // remove my bit
   U32 result = __sync_fetch_and_and(&entity->reference_mask, ~0x1);
   // if the other bit is also gone, free entity
@@ -1446,20 +1449,20 @@ os_mutex_alloc(void){
 
 internal void
 os_mutex_release(OS_Handle mutex){
-  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(mutex.id);
+  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(mutex.u64[0]);
   pthread_mutex_destroy(&entity->mutex);
   lnx_free_entity(entity);
 }
 
 internal void
 os_mutex_take_(OS_Handle mutex){
-  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(mutex.id);
+  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(mutex.u64[0]);
   pthread_mutex_lock(&entity->mutex);
 }
 
 internal void
 os_mutex_drop_(OS_Handle mutex){
-  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(mutex.id);
+  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(mutex.u64[0]);
   pthread_mutex_unlock(&entity->mutex);
 }
 
@@ -1527,7 +1530,7 @@ os_condition_variable_alloc(void){
 
 internal void
 os_condition_variable_release(OS_Handle cv){
-  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(cv.id);
+  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(cv.u64[0]);
   pthread_cond_destroy(&entity->cond);
   lnx_free_entity(entity);
 }
@@ -1535,10 +1538,10 @@ os_condition_variable_release(OS_Handle cv){
 internal B32
 os_condition_variable_wait_(OS_Handle cv, OS_Handle mutex, U64 endt_us){
   B32 result = false;
-  LNX_Entity *entity_cond = (LNX_Entity*)PtrFromInt(cv.id);
-  LNX_Entity *entity_mutex = (LNX_Entity*)PtrFromInt(mutex.id);
+  LNX_Entity *entity_cond = (LNX_Entity*)PtrFromInt(cv.u64[0]);
+  LNX_Entity *entity_mutex = (LNX_Entity*)PtrFromInt(mutex.u64[0]);
   // TODO(allen): implement the time control
-  pthread_cond_timedwait(&entity_cond->cond, &entity_mutex->mutex);
+  pthread_cond_wait(&entity_cond->cond, &entity_mutex->mutex);
   return(result);
 }
 
@@ -1558,14 +1561,15 @@ os_condition_variable_wait_rw_w_(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
 
 internal void
 os_condition_variable_signal_(OS_Handle cv){
-  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(cv.id);
+  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(cv.u64[0]);
   pthread_cond_signal(&entity->cond);
 }
 
 internal void
 os_condition_variable_broadcast_(OS_Handle cv){
-  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(cv.id);
-  DontCompile;
+  LNX_Entity *entity = (LNX_Entity*)PtrFromInt(cv.u64[0]);
+  NotImplemented;
+  // DontCompile;
 }
 
 //- rjf: cross-process semaphores
@@ -1599,7 +1603,7 @@ os_semaphore_close(OS_Handle semaphore)
 }
 
 internal B32
-os_semaphore_take(OS_Handle semaphore)
+os_semaphore_take(OS_Handle semaphore, U64 endt_us)
 {
   NotImplemented;
   return 0;
@@ -1629,7 +1633,7 @@ internal VoidProc *
 os_library_load_proc(OS_Handle lib, String8 name)
 {
   Temp scratch = scratch_begin(0, 0);
-  void *so = (void *)lib.id;
+  void *so = (void *)lib.u64[0];
   char *name_cstr = (char *)push_str8_copy(scratch.arena, name).str;
   VoidProc *proc = (VoidProc *)dlsym(so, name_cstr);
   scratch_end(scratch);
@@ -1639,7 +1643,7 @@ os_library_load_proc(OS_Handle lib, String8 name)
 internal void
 os_library_close(OS_Handle lib)
 {
-  void *so = (void *)lib.id;
+  void *so = (void *)lib.u64[0];
   dlclose(so);
 }
 

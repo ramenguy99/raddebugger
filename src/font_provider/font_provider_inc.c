@@ -9,6 +9,6 @@
 # elif FP_BACKEND == FP_BACKEND_FREETYPE
 #  include "freetype/font_provider_freetype.cpp"
 # else
-#  error Font provider backend not specified.
+// #  error Font provider backend not specified.
 # endif
 #endif

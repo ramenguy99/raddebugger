@@ -6,10 +6,12 @@
 ////////////////////////////////
 //~ allen: Elf Parsing Code
 
-#include "syms/syms_elf_inc.c"
+// #include "syms/syms_elf_inc.c"
 
 ////////////////////////////////
 //~ rjf: Globals
+
+#if 0
 
 global B32 demon_lnx_already_has_halt_injection = false;
 global U64 demon_lnx_halt_code = 0;
@@ -120,6 +122,7 @@ demon_lnx_arch_from_pid(pid_t pid){
   Temp scratch = scratch_begin(0, 0);
   Architecture result = Architecture_Null;
   
+#if 0
   // exe path
   String8 exe_path = demon_lnx_executable_path_from_pid(scratch.arena, pid);
   
@@ -187,6 +190,7 @@ demon_lnx_arch_from_pid(pid_t pid){
     }break;
   }
   
+  #endif
   scratch_end(scratch);
   return(result);
 }
@@ -198,6 +202,7 @@ demon_lnx_aux_from_pid(pid_t pid, Architecture arch){
   
   // open aux data
   Temp scratch = scratch_begin(0, 0);
+#if 0
   String8 auxv_symbol_path = push_str8f(scratch.arena, "/proc/%d/auxv", pid);
   int aux_fd = open((char*)auxv_symbol_path.str, O_RDONLY);
   
@@ -241,6 +246,8 @@ demon_lnx_aux_from_pid(pid_t pid, Architecture arch){
     close(aux_fd);
   }
   
+#endif
+
   scratch_end(scratch);
   return(result);
 }
@@ -250,6 +257,7 @@ demon_lnx_phdr_info_from_memory(int memory_fd, B32 is_32bit, U64 phvaddr, U64 ph
   DEMON_LNX_PhdrInfo result = {0};
   result.range.min = max_U64;
   
+#if 0
   // how much phdr will we read?
   U64 phdr_size_expected = (is_32bit?sizeof(SYMS_ElfPhdr32):sizeof(SYMS_ElfPhdr64));
   U64 phdr_stride = (phentsize?phentsize:phdr_size_expected);
@@ -294,6 +302,7 @@ demon_lnx_phdr_info_from_memory(int memory_fd, B32 is_32bit, U64 phvaddr, U64 ph
       }break;
     }
   }
+  #endif
   
   return(result);
 }
@@ -304,6 +313,7 @@ demon_lnx_module_list_from_process(Arena *arena, DEMON_Entity *process){
   B32 is_32bit = (arch == Architecture_x86 || arch == Architecture_arm32);
   int memory_fd = (int)process->ext_u64;
   
+#if 0
   // aux from pid
   DEMON_LNX_ProcessAux aux = demon_lnx_aux_from_pid((pid_t)process->id, arch);
   
@@ -421,6 +431,9 @@ demon_lnx_module_list_from_process(Arena *arena, DEMON_Entity *process){
   }
   
   return(first);
+#else
+  return 0;
+#endif
 }
 
 internal U64
@@ -1887,7 +1900,7 @@ demon_os_write_regs_x86(DEMON_Entity *thread, SYMS_RegX86 *src){
 }
 
 internal B32
-demon_os_read_regs_x64(DEMON_Entity *thread, SYMS_RegX64 *dst){
+demon_os_read_regs_x64(DEMON_Entity *thread, REGS_RegBlockX64 *dst){
   pid_t tid = (pid_t)thread->id;
   
   // gpr
@@ -1897,6 +1910,7 @@ demon_os_read_regs_x64(DEMON_Entity *thread, SYMS_RegX64 *dst){
   iov_gpr.iov_len = sizeof(ctx);
   iov_gpr.iov_base = &ctx;
   if (ptrace(PTRACE_GETREGSET, tid, (void*)NT_PRSTATUS, &iov_gpr) != -1){
+    NotImplemented
     demon_lnx_regs_x64_from_usr_regs_x64(dst, &ctx.regs);
     got_gpr = true;
   }
@@ -2104,3 +2118,5 @@ demon_os_proc_iter_end(DEMON_ProcessIter *iter){
   }
   MemoryZeroStruct(iter);
 }
+
+#endif

@@ -111,7 +111,7 @@ struct DEMON_LNX_UserRegsX64{
 struct DEMON_LNX_UserX64{
   DEMON_LNX_UserRegsX64 regs;
   S32 u_fpvalid, _pad0;
-  SYMS_XSaveLegacy i387;
+  // SYMS_XSaveLegacy i387; TODO
   U64 u_tsize, u_dsize, u_ssize, start_code, start_stack;
   U64 signal;
   S32 reserved, _pad1;
@@ -144,7 +144,7 @@ struct DEMON_LNX_UserRegsX86{
 struct DEMON_LNX_UserX86{
   DEMON_LNX_UserRegsX86 regs;
   S32 u_fpvalid;
-  SYMS_FSave i387;
+  // SYMS_FSave i387;
   U32 u_tsize, u_dsize, u_ssize, start_code, start_stack;
   S32 signal, reserved;
   U32 u_ar0, u_fpstate;
@@ -208,8 +208,8 @@ internal U64     demon_lnx_read_memory(int memory_fd, void *dst, U64 src, U64 si
 internal B32     demon_lnx_write_memory(int memory_fd, U64 dst, void *src, U64 size);
 internal String8 demon_lnx_read_memory_str(Arena *arena, int memory_fd, U64 address);
 
-internal void demon_lnx_regs_x64_from_usr_regs_x64(SYMS_RegX64 *dst, DEMON_LNX_UserRegsX64 *src);
-internal void demon_lnx_usr_regs_x64_from_regs_x64(DEMON_LNX_UserRegsX64 *dst, SYMS_RegX64 *src);
+internal void demon_lnx_regs_x64_from_usr_regs_x64(REGS_RegBlockX64 *dst, DEMON_LNX_UserRegsX64 *src);
+internal void demon_lnx_usr_regs_x64_from_regs_x64(DEMON_LNX_UserRegsX64 *dst, REGS_RegBlockX64 *src);
 
 internal String8 demon_lnx_read_int_string(int fd);
 internal B32     demon_lnx_read_expect(int fd, char expect);
