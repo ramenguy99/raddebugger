@@ -27,26 +27,25 @@
 
 #elif OS_LINUX
 
-#include <atomic>
-
+#include <stdatomic.h>
 internal U32
-ins_atomic_u32_eval_cond_assign_helper(volatile std::atomic<U32>* dest, U32 exchange, U32 comperand)
+ins_atomic_u32_eval_cond_assign_helper(volatile _Atomic(U32)* dest, U32 exchange, U32 comperand)
 {
-    std::atomic_compare_exchange_strong(dest, &exchange, comperand);
+    atomic_compare_exchange_strong(dest, &exchange, comperand);
     return exchange;
 }
 
-#define ins_atomic_u64_eval(x) std::atomic_load((volatile std::atomic<U64> *)(x))
-#define ins_atomic_u64_inc_eval(x) std::atomic_fetch_add((volatile std::atomic<U64> *)(x), 1)
-#define ins_atomic_u64_add_eval(x,c) std::atomic_fetch_add((volatile std::atomic<U64>*)(x), c)
-#define ins_atomic_u64_dec_eval(x) std::atomic_fetch_sub((volatile std::atomic<U64> *)(x), 1)
-#define ins_atomic_u64_eval_assign(x,c) std::atomic_exchange((volatile std::atomic<U64>*)(x), c)
-#define ins_atomic_u32_eval_assign(x,c) std::atomic_exchange((volatile std::atomic<U32>*)(x), c)
-#define ins_atomic_u32_eval_cond_assign(x,k,c) ins_atomic_u32_eval_cond_assign_helper((volatile std::atomic<U32>*)(x), k, c)
-#define ins_atomic_ptr_eval_assign(x,c) (void*)ins_atomic_u64_eval_assign((volatile std::atomic<U64>*)(x), (U64)(c))
+#define ins_atomic_u64_eval(x) atomic_load((volatile _Atomic(U64) *)(x))
+#define ins_atomic_u64_inc_eval(x) atomic_fetch_add((volatile _Atomic(U64)*)(x), 1)
+#define ins_atomic_u64_add_eval(x,c) atomic_fetch_add((volatile _Atomic(U64)*)(x), c)
+#define ins_atomic_u64_dec_eval(x) atomic_fetch_sub((volatile _Atomic(U64)*)(x), 1)
+#define ins_atomic_u64_eval_assign(x,c) atomic_exchange((volatile _Atomic(U64)*)(x), c)
+#define ins_atomic_u32_eval_assign(x,c) atomic_exchange((volatile _Atomic(U32)*)(x), c)
+#define ins_atomic_u32_eval_cond_assign(x,k,c) ins_atomic_u32_eval_cond_assign_helper((volatile _Atomic(U32)*)(x), k, c)
+#define ins_atomic_ptr_eval_assign(x,c) (void*)ins_atomic_u64_eval_assign((volatile _Atomic(U64)*)(x), (U64)(c))
 
 #else
-// TODO(allen): 
+// TODO(allen):
 #endif
 
 ////////////////////////////////

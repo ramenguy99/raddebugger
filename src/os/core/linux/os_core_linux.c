@@ -841,9 +841,6 @@ os_init(void)
   
   // NOTE(allen): Initialize Paths
   lnx_initial_path = os_string_from_system_path(lnx_perm_arena, OS_SystemPath_Current);
-  
-  // NOTE(rjf): Setup command line args
-  lnx_cmd_line_args = os_string_list_from_argcv(lnx_perm_arena, argc, argv);
 }
 
 ////////////////////////////////

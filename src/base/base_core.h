@@ -155,36 +155,6 @@
 #define StaticAssert(C, ID) global U8 Glue(ID, __LINE__)[(C)?1:-1]
 
 ////////////////////////////////
-//~ rjf: Atomic Operations
-
-#if OS_WINDOWS
-# include <windows.h>
-# include <tmmintrin.h>
-# include <wmmintrin.h>
-# include <intrin.h>
-# if ARCH_X64
-#  define ins_atomic_u64_eval(x) InterlockedAdd64((volatile __int64 *)(x), 0)
-#  define ins_atomic_u64_inc_eval(x) InterlockedIncrement64((volatile __int64 *)(x))
-#  define ins_atomic_u64_dec_eval(x) InterlockedDecrement64((volatile __int64 *)(x))
-#  define ins_atomic_u64_eval_assign(x,c) InterlockedExchange64((volatile __int64 *)(x),(c))
-#  define ins_atomic_u64_add_eval(x,c) InterlockedAdd64((volatile __int64 *)(x), c)
-#  define ins_atomic_u32_eval_assign(x,c) InterlockedExchange((volatile LONG *)(x),(c))
-#  define ins_atomic_u32_eval_cond_assign(x,k,c) InterlockedCompareExchange((volatile LONG *)(x),(k),(c))
-#  define ins_atomic_ptr_eval_assign(x,c) (void*)ins_atomic_u64_eval_assign((volatile __int64 *)(x), (__int64)(c))
-# else
-#  error Atomic intrinsics not defined for this operating system / architecture combination.
-# endif
-#elif OS_LINUX
-# if ARCH_X64
-#  define ins_atomic_u64_inc_eval(x) __sync_fetch_and_add((volatile U64 *)(x), 1)
-# else
-#  error Atomic intrinsics not defined for this operating system / architecture combination.
-# endif
-#else
-# error Atomic intrinsics not defined for this operating system.
-#endif
-
-////////////////////////////////
 //~ rjf: Linked List Building Macros
 
 //- rjf: linked list macro helpers
@@ -345,6 +315,50 @@ struct U128
 {
   U64 u64[2];
 };
+
+////////////////////////////////
+//~ rjf: Atomic Operations
+
+#if OS_WINDOWS
+# include <windows.h>
+# include <tmmintrin.h>
+# include <wmmintrin.h>
+# include <intrin.h>
+# if ARCH_X64
+#  define ins_atomic_u64_eval(x) InterlockedAdd64((volatile __int64 *)(x), 0)
+#  define ins_atomic_u64_inc_eval(x) InterlockedIncrement64((volatile __int64 *)(x))
+#  define ins_atomic_u64_dec_eval(x) InterlockedDecrement64((volatile __int64 *)(x))
+#  define ins_atomic_u64_eval_assign(x,c) InterlockedExchange64((volatile __int64 *)(x),(c))
+#  define ins_atomic_u64_add_eval(x,c) InterlockedAdd64((volatile __int64 *)(x), c)
+#  define ins_atomic_u32_eval_assign(x,c) InterlockedExchange((volatile LONG *)(x),(c))
+#  define ins_atomic_u32_eval_cond_assign(x,k,c) InterlockedCompareExchange((volatile LONG *)(x),(k),(c))
+#  define ins_atomic_ptr_eval_assign(x,c) (void*)ins_atomic_u64_eval_assign((volatile __int64 *)(x), (__int64)(c))
+# else
+#  error Atomic intrinsics not defined for this operating system / architecture combination.
+# endif
+#elif OS_LINUX
+
+#include <atomic>
+
+internal U32
+ins_atomic_u32_eval_cond_assign_helper(volatile std::atomic<U32>* dest, U32 exchange, U32 comperand)
+{
+    std::atomic_compare_exchange_strong(dest, &exchange, comperand);
+    return exchange;
+}
+
+#define ins_atomic_u64_eval(x) std::atomic_load((volatile std::atomic<U64> *)(x))
+#define ins_atomic_u64_inc_eval(x) std::atomic_fetch_add((volatile std::atomic<U64> *)(x), 1)
+#define ins_atomic_u64_add_eval(x,c) std::atomic_fetch_add((volatile std::atomic<U64>*)(x), c)
+#define ins_atomic_u64_dec_eval(x) std::atomic_fetch_sub((volatile std::atomic<U64> *)(x), 1)
+#define ins_atomic_u64_eval_assign(x,c) std::atomic_exchange((volatile std::atomic<U64>*)(x), c)
+#define ins_atomic_u32_eval_assign(x,c) std::atomic_exchange((volatile std::atomic<U32>*)(x), c)
+#define ins_atomic_u32_eval_cond_assign(x,k,c) ins_atomic_u32_eval_cond_assign_helper((volatile std::atomic<U32>*)(x), k, c)
+#define ins_atomic_ptr_eval_assign(x,c) (void*)ins_atomic_u64_eval_assign((volatile std::atomic<U64>*)(x), (U64)(c))
+
+#else
+# error Atomic intrinsics not defined for this operating system.
+#endif
 
 ////////////////////////////////
 //~ rjf: Basic Types & Spaces
