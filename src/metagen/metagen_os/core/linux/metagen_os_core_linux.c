@@ -889,7 +889,7 @@ os_release(void *ptr, U64 size){
 internal B32
 os_set_large_pages(B32 flag)
 {
-  NotImplemented;
+  return false;
 }
 
 internal B32
@@ -1116,52 +1116,149 @@ os_exit_process(S32 exit_code){
 //- rjf: files
 
 internal OS_Handle
+lnx_fd_to_handle(int fd)
+{
+  OS_Handle result = {0};
+  result.u64[0] = fd;
+  return result;
+}
+
+internal int
+lnx_handle_to_fd(OS_Handle handle)
+{
+  return handle.u64[0];
+}
+
+internal OS_Handle
 os_file_open(OS_AccessFlags flags, String8 path)
 {
   OS_Handle file = {0};
-  NotImplemented;
+  file.u64[0] = ~0;
+
+  int open_flags = 0;
+  if(flags & OS_AccessFlag_Read && (flags & OS_AccessFlag_Write) == 0) { open_flags |= O_RDONLY; }
+  if((flags & OS_AccessFlag_Read) == 0 && (flags & OS_AccessFlag_Write)) { open_flags |= O_WRONLY; }
+
+  int fd = open((char*)path.str, open_flags);
+  if(fd >= 0) 
+  {
+    file = lnx_fd_to_handle(fd);
+  } 
+
   return file;
 }
 
 internal void
 os_file_close(OS_Handle file)
 {
-  NotImplemented;
+  int fd = lnx_handle_to_fd(file);
+  if(fd >= 0) {
+    close(fd);
+  }
 }
 
 internal U64
 os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 {
-  NotImplemented;
-  return 0;
+  int fd = lnx_handle_to_fd(file);
+  if(fd < 0) return 0;
+    
+  struct stat info;
+  int stat_result = fstat(fd, &info);
+  if(stat_result != 0) return 0;
+
+  U64 size = info.st_size;
+  Rng1U64 rng_clamped  = r1u64(ClampTop(rng.min, size), ClampTop(rng.max, size));
+
+  U64 total_read = 0;
+  {
+    U64 to_read = dim_1u64(rng_clamped);
+    for(U64 offset = rng.min; total_read < to_read;)
+    {
+      size_t bytes_to_read = to_read - total_read;
+      ssize_t bread = pread(fd, (U8*)out_data + total_read, bytes_to_read, offset);
+      bool ok = bread >= 0;
+      if (!ok) break;
+
+      total_read += bread;
+      offset += bread;
+    }
+  }
+  
+  return total_read;
 }
 
 internal void
 os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 {
-  NotImplemented;
+  int fd = lnx_handle_to_fd(file);
+  if(fd < 0) return;
+    
+  struct stat info;
+  int stat_result = fstat(fd, &info);
+  if(stat_result != 0) return;
+
+  U64 size = info.st_size;
+  Rng1U64 rng_clamped  = r1u64(ClampTop(rng.min, size), ClampTop(rng.max, size));
+
+  U64 total_written = 0;
+  {
+    U64 to_write = dim_1u64(rng_clamped);
+    for(U64 offset = rng.min; total_written < to_write;)
+    {
+      size_t bytes_to_write = to_write - total_written;
+      ssize_t bwritten = pwrite(fd, (U8*)data + total_written, bytes_to_write, offset);
+      bool ok = bwritten >= 0;
+      if (!ok) break;
+
+      total_written += bwritten;
+      offset += bwritten;
+    }
+  }
+
+  return;
 }
 
 internal B32
 os_file_set_times(OS_Handle file, DateTime time)
 {
   NotImplemented;
+  return false;
 }
 
 internal FileProperties
 os_properties_from_file(OS_Handle file)
 {
   FileProperties props = {0};
-  NotImplemented;
+
+  int fd = lnx_handle_to_fd(file);
+  if(fd < 0) return props;
+    
+  struct stat info;
+  int stat_result = fstat(fd, &info);
+  if(stat_result != 0) return props;
+
+  lnx_file_properties_from_stat(&props, &info);
   return props;
 }
 
 internal OS_FileID
 os_id_from_file(OS_Handle file)
 {
-  // TODO(nick): querry struct stat with fstat(2) and use st_dev and st_ino as ids
   OS_FileID id = {0};
-  NotImplemented;
+
+  int fd = lnx_handle_to_fd(file);
+  if(fd < 0) return id;
+    
+  //- nick: querry struct stat with fstat(2) and use st_dev and st_ino as ids
+  struct stat info = {};
+  int result = fstat(fd, &info);
+  if(result == 0) 
+  {
+    id.v[0] = info.st_dev;
+    id.v[1] = info.st_ino;
+  }
+  
   return id;
 }
 
@@ -1188,17 +1285,22 @@ os_copy_file_path(String8 dst, String8 src)
 internal String8
 os_full_path_from_path(Arena *arena, String8 path)
 {
-  // TODO: realpath can be used to resolve full path
+  char* rpath = realpath((char*)path.str, 0);
+
   String8 result = {0};
-  NotImplemented;
+  U64 size = cstring8_length((U8*)rpath);
+  result.str = push_array_no_zero(arena, U8, size + 1);
+  MemoryCopy(result.str, rpath, size);
+  result.size = size;
+  result.str[result.size] = 0;
   return result;
 }
 
 internal B32
 os_file_path_exists(String8 path)
 {
-  NotImplemented;
-  return 0;
+  struct stat info = {};
+  return stat((char*)path.str, &info) == 0;
 }
 
 //- rjf: file maps
@@ -1235,21 +1337,87 @@ os_file_map_view_close(OS_Handle map, void *ptr)
 internal OS_FileIter *
 os_file_iter_begin(Arena *arena, String8 path, OS_FileIterFlags flags)
 {
-  NotImplemented;
-  return 0;
+  OS_FileIter *iter = push_array(arena, OS_FileIter, 1);
+  iter->flags = flags;
+  LNX_FileIter *lnx_iter = (LNX_FileIter*)&iter->memory[0];
+  lnx_iter->dir = opendir((char*)path.str);
+  lnx_iter->fd = dirfd(lnx_iter->dir);
+  return iter;
 }
 
 internal B32
 os_file_iter_next(Arena *arena, OS_FileIter *iter, OS_FileInfo *info_out)
 {
-  NotImplemented;
-  return 0;
+  B32 result = 0;
+  OS_FileIterFlags flags = iter->flags;
+  LNX_FileIter *lnx_iter = (LNX_FileIter*)&iter->memory[0];
+  DIR *directory = lnx_iter->dir;
+  if (!(flags & OS_FileIterFlag_Done) && directory != 0)
+  {
+    struct dirent *entry;
+    while((entry = readdir(directory)) != NULL)
+    {
+      // check is usable
+      B32 usable_file = 1;
+      
+      char *file_name = entry->d_name;
+      if (file_name[0] == '.')
+      {
+        if (flags & OS_FileIterFlag_SkipHiddenFiles){
+          usable_file = 0;
+        }
+        else if (file_name[1] == 0){
+          usable_file = 0;
+        }
+        else if (file_name[1] == '.' && file_name[2] == 0){
+          usable_file = 0;
+        }
+      }
+      if (entry->d_type == DT_DIR)
+      {
+        if (flags & OS_FileIterFlag_SkipFolders)
+        {
+          usable_file = 0;
+        }
+      }
+      else{
+        if (flags & OS_FileIterFlag_SkipFiles)
+        {
+          usable_file = 0;
+        }
+      }
+      
+      struct stat info = {};
+      if(usable_file) {
+        int stat_result = fstatat(lnx_iter->fd, file_name, &info, 0);
+        if(stat_result != 0) 
+        {
+          usable_file = 0;
+        }
+      }
+
+      // emit if usable
+      if (usable_file)
+      {
+        info_out->name = push_str8_copy(arena, str8_cstring(file_name));
+        lnx_file_properties_from_stat(&info_out->props, &info);
+        result = 1;
+        break;
+      }
+    }
+    
+    if (entry == NULL){
+      iter->flags |= OS_FileIterFlag_Done;
+    }
+  }
+  return result;
 }
 
 internal void
 os_file_iter_end(OS_FileIter *iter)
 {
-  NotImplemented;
+  LNX_FileIter *lnx_iter = (LNX_FileIter*)&iter->memory[0];
+  closedir(lnx_iter->dir);
 }
 
 //- rjf: directory creation
@@ -1260,7 +1428,8 @@ os_make_directory(String8 path)
   Temp scratch = scratch_begin(0, 0);
   B32 result = false;
   String8 name_copy = push_str8_copy(scratch.arena, path);
-  if (mkdir((char*)name_copy.str, 0777) != -1){
+  int status = mkdir((char*)name_copy.str, 0777);
+  if (status != -1 || errno == EEXIST){
     result = true;
   }
   scratch_end(scratch);
