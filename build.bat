@@ -92,7 +92,7 @@ if "%opengl%"=="1" set compile=%compile% -DR_BACKEND=2 -DBUILD_RENDERING_BACKEND
 
 :: --- Set font backend -------------------------------------------------------
 if "%freetype%"=="1" (
-  set compile=%compile% -DFP_BACKEND=2 -I"..\..\freetype-windows-binaries\include"
+  set compile=%compile% -DFP_BACKEND=2 -I"..\..\freetype-windows-binaries\include" -DBUILD_FONT_BACKEND=\"FreeType\"
   set compile_link=%compile_link% -LIBPATH:"..\..\freetype-windows-binaries\release static\vs2015-2022\win64" freetype.lib -ignore:4099
 )
 
