@@ -923,8 +923,6 @@ os_free_ring_buffer(void *ring_buffer, U64 actual_size)
 
 internal String8
 os_machine_name(void){
-  return str8_lit("Linux machine");
-  /*
   local_persist B32 first = true;
   local_persist String8 name = {0};
   
@@ -941,7 +939,7 @@ os_machine_name(void){
     for (S64 cap = 4096, r = 0;
          r < 4;
          cap *= 2, r += 1){
-      scratch.restore();
+      scratch_end(scratch);
       buffer = push_array_no_zero(scratch.arena, U8, cap);
       size = gethostname((char*)buffer, cap);
       if (size < cap){
@@ -963,7 +961,6 @@ os_machine_name(void){
   pthread_mutex_unlock(&lnx_mutex);
   
   return(name);
-  */
 }
 
 internal U64
@@ -1130,10 +1127,13 @@ lnx_handle_to_fd(OS_Handle handle)
 }
 
 internal OS_Handle
-os_file_open(OS_AccessFlags flags, String8 path)
+os_file_open(OS_AccessFlags flags, String8 path_not_zero_terminated)
 {
   OS_Handle file = {0};
   file.u64[0] = ~0;
+
+  Temp scratch = scratch_begin(0, 0);
+  String8 path = push_str8_copy(scratch.arena, path_not_zero_terminated);
 
   int open_flags = 0;
   if(flags & OS_AccessFlag_Read && (flags & OS_AccessFlag_Write) == 0) { open_flags |= O_RDONLY; }
@@ -1145,6 +1145,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
     file = lnx_fd_to_handle(fd);
   } 
 
+  scratch_end(scratch);
   return file;
 }
 
@@ -1283,8 +1284,10 @@ os_copy_file_path(String8 dst, String8 src)
 }
 
 internal String8
-os_full_path_from_path(Arena *arena, String8 path)
+os_full_path_from_path(Arena *arena, String8 path_not_zero_terminated)
 {
+  Temp scratch = scratch_begin(0, 0);
+  String8 path = push_str8_copy(scratch.arena, path_not_zero_terminated);
   char* rpath = realpath((char*)path.str, 0);
 
   String8 result = {0};
@@ -1293,14 +1296,20 @@ os_full_path_from_path(Arena *arena, String8 path)
   MemoryCopy(result.str, rpath, size);
   result.size = size;
   result.str[result.size] = 0;
+  scratch_end(scratch);
   return result;
 }
 
 internal B32
-os_file_path_exists(String8 path)
+os_file_path_exists(String8 path_not_zero_terminated)
 {
+  Temp scratch = scratch_begin(0, 0);
+  String8 path = push_str8_copy(scratch.arena, path_not_zero_terminated);
+
   struct stat info = {};
-  return stat((char*)path.str, &info) == 0;
+  B32 result = stat((char*)path.str, &info) == 0;
+  scratch_end(scratch);
+  return result;
 }
 
 //- rjf: file maps
@@ -1335,13 +1344,17 @@ os_file_map_view_close(OS_Handle map, void *ptr)
 //- rjf: directory iteration
 
 internal OS_FileIter *
-os_file_iter_begin(Arena *arena, String8 path, OS_FileIterFlags flags)
+os_file_iter_begin(Arena *arena, String8 path_not_zero_terminated, OS_FileIterFlags flags)
 {
   OS_FileIter *iter = push_array(arena, OS_FileIter, 1);
   iter->flags = flags;
   LNX_FileIter *lnx_iter = (LNX_FileIter*)&iter->memory[0];
+
+  Temp scratch = scratch_begin(0, 0);
+  String8 path = push_str8_copy(scratch.arena, path_not_zero_terminated);
   lnx_iter->dir = opendir((char*)path.str);
   lnx_iter->fd = dirfd(lnx_iter->dir);
+  scratch_end(scratch);
   return iter;
 }
 
