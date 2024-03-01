@@ -1097,6 +1097,14 @@ os_string_list_from_system_path(Arena *arena, OS_SystemPath path, String8List *o
 }
 
 ////////////////////////////////
+//~ rjf: @os_hooks Thread Names
+
+internal void
+os_set_thread_name(String8 name)
+{
+}
+
+////////////////////////////////
 //~ rjf: @os_hooks Process Control (Implemented Per-OS)
 
 internal void
@@ -1383,6 +1391,17 @@ os_launch_process(OS_LaunchOptions *options, OS_Handle *handle_out){
   return(false);
 }
 
+internal B32
+os_process_wait(OS_Handle handle, U64 endt_us){
+  NotImplemented;
+  return(false);
+}
+
+internal void
+os_process_release_handle(OS_Handle handle){
+  NotImplemented;
+}
+
 ////////////////////////////////
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
 
@@ -1605,7 +1624,7 @@ os_semaphore_close(OS_Handle semaphore)
 }
 
 internal B32
-os_semaphore_take(OS_Handle semaphore)
+os_semaphore_take(OS_Handle semaphore, U64 endt_us)
 {
   NotImplemented;
   return 0;
@@ -1686,3 +1705,23 @@ os_make_guid(void)
   NotImplemented;
 }
 
+
+////////////////////////////////
+//~ rjf: @os_hooks Entry Points (Implemented Per-OS)
+
+int main(int argc, char **argv)
+{
+  // TODO: exception filter stuff
+  for(int i = 0; i < argc; i += 1)
+  {
+    String8 arg8 = str8_cstring(argv[i]);
+    if(str8_match(arg8, str8_lit("--quiet"), StringMatchFlag_CaseInsensitive))
+    {
+      // linux_g_is_quiet = 1;
+    }
+  }
+
+  // TODO: exception filter stuff
+  main_thread_base_entry_point(entry_point, argv, (U64)argc);
+  return 0;
+}

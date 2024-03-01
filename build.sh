@@ -51,7 +51,7 @@
 CC_FLAGS="-I../src -I../local -Wno-unused-function -Wno-writable-strings -Wno-unused-value -Wno-unused-variable -Wno-ignored-attributes -Wno-undefined-internal -Wno-unused-local-typedef -Wno-deprecated-register -Wno-deprecated-declarations -Wno-switch"
 CC_FLAGS_DEBUG="-O0 -g"
 CC_DEBUG="clang $CC_FLAGS $CC_FLAGS_DEBUG"
-CC_LINK="-pthread"
+CC_LINK="-pthread -lm"
 
 # :: --- Per-Build Settings -----------------------------------------------------
 # set gfx=-DOS_FEATURE_GRAPHICAL=1
@@ -100,8 +100,8 @@ mkdir -p local
 # )
 pushd build
 echo `pwd`
-$CC_DEBUG ../src/metagen/metagen_main.c $CC_LINK -o metagen || exit 1
-# $CC_DEBUG -DOS_FEATURE_GRAPHICAL=1 ../src/raddbg/raddbg_main.cpp $CC_LINK -o raddbg || exit 1
+# $CC_DEBUG ../src/metagen/metagen_main.c $CC_LINK -o metagen || exit 1
+$CC_DEBUG -DOS_FEATURE_GRAPHICAL=1 -DR_BACKEND=0 -DFP_BACKEND=2 `pkg-config freetype2 --cflags --libs` -fno-exceptions ../src/raddbg/raddbg_main.cpp $CC_LINK -o raddbg || exit 1
 
 #%compile%             ..\src\raddbg_convert\pdb\raddbg_from_pdb_main.c             %compile_link% %out%raddbg_from_pdb.exe || exit /b 1
 #%compile%             ..\src\raddbg_convert\dwarf\raddbg_from_dwarf.c              %compile_link% %out%raddbg_from_dwarf.exe || exit /b 1

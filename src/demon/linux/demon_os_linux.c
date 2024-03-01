@@ -11,7 +11,6 @@
 ////////////////////////////////
 //~ rjf: Globals
 
-#if 0
 
 global B32 demon_lnx_already_has_halt_injection = false;
 global U64 demon_lnx_halt_code = 0;
@@ -519,7 +518,7 @@ demon_lnx_read_memory_str(Arena *arena, int memory_fd, U64 address){
 }
 
 internal void
-demon_lnx_regs_x64_from_usr_regs_x64(SYMS_RegX64 *dst, DEMON_LNX_UserRegsX64 *src){
+demon_lnx_regs_x64_from_usr_regs_x64(REGS_RegBlockX64 *dst, DEMON_LNX_UserRegsX64 *src){
   dst->rax.u64 = src->rax;
   dst->rcx.u64 = src->rcx;
   dst->rdx.u64 = src->rdx;
@@ -549,7 +548,7 @@ demon_lnx_regs_x64_from_usr_regs_x64(SYMS_RegX64 *dst, DEMON_LNX_UserRegsX64 *sr
 }
 
 internal void
-demon_lnx_usr_regs_x64_from_regs_x64(DEMON_LNX_UserRegsX64 *dst, SYMS_RegX64 *src){
+demon_lnx_usr_regs_x64_from_regs_x64(DEMON_LNX_UserRegsX64 *dst, REGS_RegBlockX64 *src){
   dst->rax = src->rax.u64;
   dst->rcx = src->rcx.u64;
   dst->rdx = src->rdx.u64;
@@ -819,10 +818,12 @@ demon_os_run(Arena *arena, DEMON_OS_RunCtrls *controls){
   DEMON_EventList result = {0};
   
   if (demon_ent_root == 0){
-    demon_push_event(arena, &result, DEMON_EventKind_NotInitialized);
+    DEMON_Event *event = demon_push_event(arena, &result, DEMON_EventKind_Error);
+    event->error_kind = DEMON_ErrorKind_NotInitialized;
   }
   else if (demon_ent_root->first == 0 && !demon_lnx_new_process_pending){
-    demon_push_event(arena, &result, DEMON_EventKind_NotAttached);
+    DEMON_Event *event = demon_push_event(arena, &result, DEMON_EventKind_Error);
+    event->error_kind = DEMON_ErrorKind_NotAttached;
   }
   else{
     Temp scratch = scratch_begin(&arena, 1);
@@ -830,10 +831,10 @@ demon_os_run(Arena *arena, DEMON_OS_RunCtrls *controls){
     // use queued events if there are any
     if (demon_lnx_queued_events.first != 0){
       // copy event queue
-      for (DEMON_Event *node = demon_lnx_queued_events.first;
+      for (DEMON_EventNode *node = demon_lnx_queued_events.first;
            node != 0;
            node = node->next){
-        DEMON_Event *copy = push_array_no_zero(arena, DEMON_Event, 1);
+        DEMON_EventNode *copy = push_array_no_zero(arena, DEMON_EventNode, 1);
         MemoryCopyStruct(copy, node);
         SLLQueuePush(result.first, result.last, copy);
       }
@@ -859,7 +860,7 @@ demon_os_run(Arena *arena, DEMON_OS_RunCtrls *controls){
           case Architecture_x86:
           {
             // TODO(allen): possibly buggy
-            SYMS_RegX86 regs = {0};
+            REGS_RegBlockX86 regs = {0};
             demon_os_read_regs_x86(single_step_thread, &regs);
             regs.eflags.u32 |= 0x100;
             demon_os_write_regs_x86(single_step_thread, &regs);
@@ -868,7 +869,7 @@ demon_os_run(Arena *arena, DEMON_OS_RunCtrls *controls){
           case Architecture_x64:
           {
             // TODO(allen): possibly buggy
-            SYMS_RegX64 regs = {0};
+            REGS_RegBlockX64 regs = {0};
             demon_os_read_regs_x64(single_step_thread, &regs);
             regs.rflags.u64 |= 0x100;
             demon_os_write_regs_x64(single_step_thread, &regs);
@@ -990,7 +991,7 @@ demon_os_run(Arena *arena, DEMON_OS_RunCtrls *controls){
         
         // read register info
         U64 instruction_pointer = 0;
-        union{ SYMS_RegX86 x86; SYMS_RegX64 x64; } regs = {0};
+        union{ REGS_RegBlockX86 x86; REGS_RegBlockX64 x64; } regs = {0};
         
         switch (thread->arch){
           case Architecture_x86:
@@ -1371,7 +1372,7 @@ demon_os_run(Arena *arena, DEMON_OS_RunCtrls *controls){
         switch (single_step_thread->arch){
           case Architecture_x86:
           {
-            SYMS_RegX86 regs = {0};
+            REGS_RegBlockX86 regs = {0};
             demon_os_read_regs_x86(single_step_thread, &regs);
             regs.eflags.u32 &= ~0x100;
             demon_os_write_regs_x86(single_step_thread, &regs);
@@ -1379,7 +1380,7 @@ demon_os_run(Arena *arena, DEMON_OS_RunCtrls *controls){
           
           case Architecture_x64:
           {
-            SYMS_RegX64 regs = {0};
+            REGS_RegBlockX64 regs = {0};
             demon_os_read_regs_x64(single_step_thread, &regs);
             regs.rflags.u64 &= ~0x100;
             demon_os_write_regs_x64(single_step_thread, &regs);
@@ -1834,9 +1835,11 @@ demon_os_tls_root_vaddr_from_thread(DEMON_Entity *thread){
     {
       U32 fsbase = 0;
       pid_t tid = (pid_t)thread->id;
-      if (ptrace(PT_GETFSBASE, tid, (void*)&fsbase, 0) != -1){
-        result = (U64)fsbase;
-      }
+      NotImplemented;
+      // TODO(dmylo): not available everywhere? Maybe requires recent kernel?
+      // if (ptrace(PT_GETFSBASE, tid, (void*)&fsbase, 0) != -1){
+      //   result = (U64)fsbase;
+      // }
       if (thread->arch == Architecture_x64){
         result += 8;
       }
@@ -1886,14 +1889,14 @@ demon_os_write_memory(DEMON_Entity *process, U64 dst_address, void *src, U64 siz
 //- rjf: thread registers reading/writing
 
 internal B32
-demon_os_read_regs_x86(DEMON_Entity *thread, SYMS_RegX86 *dst){
+demon_os_read_regs_x86(DEMON_Entity *thread, REGS_RegBlockX86 *dst){
   B32 result = false;
   NotImplemented;
   return(result);
 }
 
 internal B32
-demon_os_write_regs_x86(DEMON_Entity *thread, SYMS_RegX86 *src){
+demon_os_write_regs_x86(DEMON_Entity *thread, REGS_RegBlockX86 *src){
   B32 result = false;
   NotImplemented;
   return(result);
@@ -1910,13 +1913,13 @@ demon_os_read_regs_x64(DEMON_Entity *thread, REGS_RegBlockX64 *dst){
   iov_gpr.iov_len = sizeof(ctx);
   iov_gpr.iov_base = &ctx;
   if (ptrace(PTRACE_GETREGSET, tid, (void*)NT_PRSTATUS, &iov_gpr) != -1){
-    NotImplemented
     demon_lnx_regs_x64_from_usr_regs_x64(dst, &ctx.regs);
     got_gpr = true;
   }
   
   // fpr
   B32 got_fpr = false;
+#if 0
   if (got_gpr){
     B32 got_xsave = false;
     {
@@ -1925,17 +1928,18 @@ demon_os_read_regs_x64(DEMON_Entity *thread, REGS_RegBlockX64 *dst){
       iov_xsave.iov_len = sizeof(xsave_buffer);
       iov_xsave.iov_base = xsave_buffer;
       if (ptrace(PTRACE_GETREGSET, tid, (void*)NT_X86_XSTATE, &iov_xsave) != -1){
-        SYMS_XSave *xsave = (SYMS_XSave*)xsave_buffer;
-        syms_x64_regs__set_full_regs_from_xsave_legacy(dst, &xsave->legacy);
+        NotImplemented;
+        // SYMS_XSave *xsave = (SYMS_XSave*)xsave_buffer;
+        // syms_x64_regs__set_full_regs_from_xsave_legacy(dst, &xsave->legacy);
         
-        // TODO(allen): this is a lie; ymm can technically move around
-        // we need some more low-level-assembly-fu to do this hardcore.
-        B32 has_ymm_registers = ((xsave->header.xstate_bv & 4) != 0);
-        if (has_ymm_registers){
-          syms_x64_regs__set_full_regs_from_xsave_avx_extension(dst, xsave->ymmh);
-        }
+        // // TODO(allen): this is a lie; ymm can technically move around
+        // // we need some more low-level-assembly-fu to do this hardcore.
+        // B32 has_ymm_registers = ((xsave->header.xstate_bv & 4) != 0);
+        // if (has_ymm_registers){
+        //   syms_x64_regs__set_full_regs_from_xsave_avx_extension(dst, xsave->ymmh);
+        // }
         
-        got_xsave = true;
+        // got_xsave = true;
       }
     }
     
@@ -1960,7 +1964,7 @@ demon_os_read_regs_x64(DEMON_Entity *thread, REGS_RegBlockX64 *dst){
   B32 got_debug = false;
   if (got_fpr){
     got_debug = true;
-    SYMS_Reg32 *dr_d = &dst->dr0;
+    REGS_RegBlock32 *dr_d = &dst->dr0;
     for (U32 i = 0; i < 8; i += 1, dr_d += 1){
       if (i != 4 && i != 5){
         U64 offset = OffsetOf(DEMON_LNX_UserX64, u_debugreg[i]);
@@ -1979,10 +1983,12 @@ demon_os_read_regs_x64(DEMON_Entity *thread, REGS_RegBlockX64 *dst){
   // got everything
   B32 result = got_debug;
   return(result);
+#endif
+  return got_gpr;
 }
 
 internal B32
-demon_os_write_regs_x64(DEMON_Entity *thread, SYMS_RegX64 *src){
+demon_os_write_regs_x64(DEMON_Entity *thread, REGS_RegBlockX64 *src){
   pid_t tid = (pid_t)thread->id;
   
   // gpr
@@ -1999,6 +2005,7 @@ demon_os_write_regs_x64(DEMON_Entity *thread, SYMS_RegX64 *src){
   int xsave_result = 0;
   int fxsave_result = 0;
   
+  #if 0
   {
     U8 xsave_buffer[KB(4)] = {0};
     SYMS_XSave *xsave = (SYMS_XSave*)xsave_buffer;
@@ -2030,7 +2037,7 @@ demon_os_write_regs_x64(DEMON_Entity *thread, SYMS_RegX64 *src){
   // debug
   B32 dr_success = true;
   {
-    SYMS_Reg32 *dr_s = &src->dr0;
+    REGS_RegBlock32 *dr_s = &src->dr0;
     for (U32 i = 0; i < 8; i += 1, dr_s += 1){
       if (i != 4 && i != 5){
         U64 offset = OffsetOf(DEMON_LNX_UserX64, u_debugreg[i]);
@@ -2045,6 +2052,8 @@ demon_os_write_regs_x64(DEMON_Entity *thread, SYMS_RegX64 *src){
   
   // assemble result
   B32 result = (gpr_success && fpr_success && dr_success);
+  #endif
+  B32 result = gpr_success;
   
   return(result);
 }
@@ -2118,5 +2127,3 @@ demon_os_proc_iter_end(DEMON_ProcessIter *iter){
   }
   MemoryZeroStruct(iter);
 }
-
-#endif
