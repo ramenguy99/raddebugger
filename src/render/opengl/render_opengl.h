@@ -4,9 +4,6 @@
 #ifndef RENDER_OPENGL_H
 #define RENDER_OPENGL_H
 
-#include <windows.h>
-
-#pragma comment(lib, "opengl32")
 
 ////////////////////////////////
 //~ dmylo: Generated Code

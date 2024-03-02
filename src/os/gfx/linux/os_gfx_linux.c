@@ -16,10 +16,16 @@ global OS_EventList   x11_event_list = {0};
 global Arena *        x11_event_arena = 0;
 
 global Display* x11_display;
+global Screen* x11_screen_ptr;
 global int x11_screen;
 global Window x11_root;
 global Atom x11_atom_wm_delete_window;
 global XContext x11_context;
+
+// OpenGL specific
+global GLXContext x11_gl_context;
+global GLXFBConfig x11_fbconfig;
+global Window x11_dummy_window;
 
 typedef GLXContext (glx_create_context_attribs_arb)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 
@@ -29,6 +35,7 @@ os_graphical_init(void)
   XInitThreads();
   XrmInitialize();
   x11_display = XOpenDisplay(NULL);
+  x11_screen_ptr = DefaultScreenOfDisplay(x11_display);
   x11_screen = DefaultScreen(x11_display);
   x11_root = RootWindow(x11_display, x11_screen);
   // TODO: monitor and refresh rate stuff
@@ -97,37 +104,7 @@ x11_free_window(X11_Window *window)
 internal OS_Handle
 os_window_open(Vec2F32 resolution, String8 title_not_zero_terminated)
 {
-  OS_Handle handle = {1};
-
-  GLint glx_attribs[] = {
-      GLX_X_RENDERABLE    , True,
-      GLX_DRAWABLE_TYPE   , GLX_WINDOW_BIT,
-      GLX_RENDER_TYPE     , GLX_RGBA_BIT,
-      GLX_X_VISUAL_TYPE   , GLX_TRUE_COLOR,
-      GLX_RED_SIZE        , 8,
-      GLX_GREEN_SIZE      , 8,
-      GLX_BLUE_SIZE       , 8,
-      GLX_ALPHA_SIZE      , 8,
-      GLX_DEPTH_SIZE      , 24,
-      GLX_STENCIL_SIZE    , 8,
-      GLX_DOUBLEBUFFER    , True,
-      GLX_SAMPLE_BUFFERS  , 1,
-      GLX_SAMPLES         , 1,
-      None
-    };
-    
-	int fbcount;
-	GLXFBConfig* fbc = glXChooseFBConfig(x11_display, x11_screen, glx_attribs, &fbcount);
-  if (fbc == 0 || fbcount == 0) 
-  {
-		//TODO error
-    NotImplemented;
-	}
-  
-  GLXFBConfig best_fbc = fbc[0];
-	XFree(fbc); // Make sure to free this!
-
-  XVisualInfo* visual = glXGetVisualFromFBConfig(x11_display, best_fbc);
+  XVisualInfo* visual = glXGetVisualFromFBConfig(x11_display, x11_fbconfig);
 	if (visual == 0) {
 		//TODO error
     NotImplemented;
@@ -138,14 +115,15 @@ os_window_open(Vec2F32 resolution, String8 title_not_zero_terminated)
     NotImplemented;
 	}
 
-
   XSetWindowAttributes window_attribs;
 	window_attribs.border_pixel = BlackPixel(x11_display, x11_screen);
 	window_attribs.background_pixel = WhitePixel(x11_display, x11_screen);
 	window_attribs.override_redirect = True;
 	window_attribs.colormap = XCreateColormap(x11_display, x11_root, visual->visual, AllocNone);
 	window_attribs.event_mask = ExposureMask;
-	Window window = XCreateWindow(x11_display, x11_root, 0, 0, resolution.x, resolution.y, 0, visual->depth, InputOutput, visual->visual, CWBackPixel | CWColormap | CWBorderPixel | CWEventMask, &window_attribs);
+	Window window = XCreateWindow(x11_display, x11_root, 0, 0,
+  resolution.x, resolution.y,
+  0, visual->depth, InputOutput, visual->visual, CWBackPixel | CWColormap | CWBorderPixel | CWEventMask, &window_attribs);
 
   // Set window title
   Temp scratch = scratch_begin(0, 0);
@@ -156,27 +134,6 @@ os_window_open(Vec2F32 resolution, String8 title_not_zero_terminated)
   // Redirect Close
 	x11_atom_wm_delete_window = XInternAtom(x11_display, "WM_DELETE_WINDOW", False);
 	XSetWMProtocols(x11_display, window, &x11_atom_wm_delete_window, 1);
-
-  glx_create_context_attribs_arb* glXCreateContextAttribsARB = (glx_create_context_attribs_arb*)glXGetProcAddressARB( (const GLubyte *) "glXCreateContextAttribsARB" );
-	
-	int context_attribs[] = {
-		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 1,
-		GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-		None
-	};
-
-	GLXContext context = 0;
-  context = glXCreateContextAttribsARB(x11_display, best_fbc, 0, true, context_attribs);
-	XSync(x11_display, False);
-
-	Bool result = glXMakeCurrent(x11_display, window, context);
-
-  if(!result)
-  {
-    // TODO:error
-    NotImplemented;
-  }
 
   //- dmylo: make/fill window
   X11_Window *x11_window = x11_allocate_window();
@@ -265,16 +222,26 @@ os_window_set_monitor(OS_Handle window, OS_Handle monitor)
 }
 
 internal Rng2F32
-os_rect_from_window(OS_Handle window)
+os_rect_from_window(OS_Handle handle)
 {
-  Rng2F32 rect = r2f32(v2f32(0, 0), v2f32(500, 500));
-  return rect;
+  return os_client_rect_from_window(handle);
 }
 
 internal Rng2F32
-os_client_rect_from_window(OS_Handle window)
+os_client_rect_from_window(OS_Handle handle)
 {
-  Rng2F32 rect = r2f32(v2f32(0, 0), v2f32(500, 500));
+  X11_Window *window = x11_window_from_os_window(handle);
+
+  XWindowAttributes attribs = {};
+  XGetWindowAttributes(x11_display, window->window, &attribs);
+
+  int x = attribs.x;
+  int y = attribs.x;
+  int width = attribs.width;
+  int height = attribs.height;
+  // Rng2F32 rect = r2f32(v2f32(x, y), v2f32(x + width, y + height));
+  Rng2F32 rect = r2f32(v2f32(0, 0), v2f32(width, height));
+
   return rect;
 }
 
@@ -317,7 +284,7 @@ os_name_from_monitor(Arena *arena, OS_Handle monitor)
 internal Vec2F32
 os_dim_from_monitor(OS_Handle monitor)
 {
-  Vec2F32 v = v2f32(1000, 1000);
+  Vec2F32 v = v2f32(WidthOfScreen(x11_screen_ptr), HeightOfScreen(x11_screen_ptr));
   return v;
 }
 
@@ -462,3 +429,130 @@ os_graphical_message(B32 error, String8 title, String8 message)
 {
   printf("[%s] %.*ss: %.*s", error ? "Error" : "Info", (U32)title.size, (char*)title.str, (U32)message.size, (char*)message.str);
 }
+
+// TODO: move this
+// dmylo: win32 OpenGL initialization stuff
+// #if R_BACKEND == 2
+
+internal void
+os_init_opengl(R_OGL_Functions* gl_functions)
+{
+  GLint glx_attribs[] = {
+      GLX_X_RENDERABLE    , True,
+      GLX_DRAWABLE_TYPE   , GLX_WINDOW_BIT,
+      GLX_RENDER_TYPE     , GLX_RGBA_BIT,
+      GLX_X_VISUAL_TYPE   , GLX_TRUE_COLOR,
+      GLX_RED_SIZE        , 8,
+      GLX_GREEN_SIZE      , 8,
+      GLX_BLUE_SIZE       , 8,
+      GLX_ALPHA_SIZE      , 8,
+      GLX_DEPTH_SIZE      , 24,
+      GLX_STENCIL_SIZE    , 8,
+      GLX_DOUBLEBUFFER    , True,
+      GLX_SAMPLE_BUFFERS  , 1,
+      GLX_SAMPLES         , 1,
+      None
+    };
+    
+	int fbcount;
+	GLXFBConfig* fbc = glXChooseFBConfig(x11_display, x11_screen, glx_attribs, &fbcount);
+  if (fbc == 0 || fbcount == 0) 
+  {
+		//TODO error
+    NotImplemented;
+	}
+  
+  GLXFBConfig best_fbc = fbc[0];
+	XFree(fbc); // Make sure to free this!
+
+  XVisualInfo* visual = glXGetVisualFromFBConfig(x11_display, best_fbc);
+	if (visual == 0) {
+		//TODO error
+    NotImplemented;
+	}
+	
+	if (visual->screen != x11_screen) {
+		//TODO error
+    NotImplemented;
+	}
+
+  XSetWindowAttributes window_attribs;
+	window_attribs.border_pixel = BlackPixel(x11_display, x11_screen);
+	window_attribs.background_pixel = WhitePixel(x11_display, x11_screen);
+	window_attribs.override_redirect = True;
+	window_attribs.colormap = XCreateColormap(x11_display, x11_root, visual->visual, AllocNone);
+	window_attribs.event_mask = ExposureMask;
+	Window window = XCreateWindow(x11_display, x11_root, 0, 0, 1, 1, 0, visual->depth, InputOutput, visual->visual, CWBackPixel | CWColormap | CWBorderPixel | CWEventMask, &window_attribs);
+
+  glx_create_context_attribs_arb* glXCreateContextAttribsARB = (glx_create_context_attribs_arb*)glXGetProcAddressARB( (const GLubyte *) "glXCreateContextAttribsARB" );
+	
+	int context_attribs[] = {
+		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 1,
+		GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		None
+	};
+
+	GLXContext context = glXCreateContextAttribsARB(x11_display, best_fbc, 0, true, context_attribs);
+	XSync(x11_display, False);
+
+	Bool result = glXMakeCurrent(x11_display, window, context);
+
+  if(!result)
+  {
+    // TODO:error
+    NotImplemented;
+  }
+
+  //-dmylo: Load OpenGL function and initialize state for the various passes
+  {
+    // dmylo: Load function pointers.
+    // HMODULE opengl_module = LoadLibraryA("opengl32.dll");
+    for (U64 i = 0; i < ArrayCount(r_ogl_g_function_names); i++)
+    {
+      void* ptr = (void*)glXGetProcAddressARB((GLubyte*)r_ogl_g_function_names[i]);
+      // if(!ptr) {
+      //   // dmylo: older functions are still in opengl32, so we also try that.
+      //   ptr = GetProcAddress(opengl_module, r_ogl_g_function_names[i]);
+      // }
+      if(!ptr) {
+        // dmylo: if still not found error out.
+        char buffer[256] = {0};
+        raddbg_snprintf(buffer, sizeof(buffer), "Failed to load OpenGL function: %s", r_ogl_g_function_names[i]);
+        os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
+        os_exit_process(1);
+      }
+      gl_functions->_pointers[i] = ptr;
+    }
+  }
+
+  x11_gl_context = context;
+  x11_fbconfig = best_fbc;
+  x11_dummy_window = window;
+}
+
+internal void
+os_window_equip_opengl(OS_Handle handle)
+{
+}
+
+internal void
+os_window_unequip_opengl(OS_Handle handle)
+{
+}
+
+internal void
+os_window_begin_frame_opengl(OS_Handle handle)
+{
+  X11_Window *window = x11_window_from_os_window(handle);
+	Bool result = glXMakeCurrent(x11_display, window->window, x11_gl_context);
+}
+
+internal void
+os_window_end_frame_opengl(OS_Handle handle)
+{
+  X11_Window *window = x11_window_from_os_window(handle);
+  glXSwapBuffers(x11_display, window->window);
+}
+
+// #endif

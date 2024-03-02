@@ -9,6 +9,10 @@
 #include <X11/keysymdef.h>
 #include <X11/Xresource.h>
 
+#include "render/opengl/generated/render_opengl.meta.h"
+
+//- dmylo: disable GL/gl.h include, since we have all we need already generated.
+#define __gl_h_
 #include <GL/gl.h>
 #include <GL/glx.h>
 

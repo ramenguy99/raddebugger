@@ -100,8 +100,8 @@ mkdir -p local
 # )
 pushd build
 echo `pwd`
-# $CC_DEBUG ../src/metagen/metagen_main.c $CC_LINK -o metagen || exit 1
-$CC_DEBUG -DOS_FEATURE_GRAPHICAL=1 -DR_BACKEND=0 -DFP_BACKEND=2 `pkg-config freetype2 --cflags --libs` -fno-exceptions ../src/raddbg/raddbg_main.cpp $CC_LINK -o raddbg || exit 1
+$CC_DEBUG ../src/metagen/metagen_main.c $CC_LINK -o metagen || exit 1
+$CC_DEBUG -DOS_FEATURE_GRAPHICAL=1 -DBUILD_RENDERING_BACKEND=\"OpenGL\" -DR_BACKEND=2 -DFP_BACKEND=2 `pkg-config x11 --cflags --libs` `pkg-config glx --cflags --libs` `pkg-config freetype2 --cflags --libs` -fno-exceptions ../src/raddbg/raddbg_main.cpp $CC_LINK -o raddbg || exit 1
 
 #%compile%             ..\src\raddbg_convert\pdb\raddbg_from_pdb_main.c             %compile_link% %out%raddbg_from_pdb.exe || exit /b 1
 #%compile%             ..\src\raddbg_convert\dwarf\raddbg_from_dwarf.c              %compile_link% %out%raddbg_from_dwarf.exe || exit /b 1

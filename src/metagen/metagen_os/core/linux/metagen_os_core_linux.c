@@ -1136,8 +1136,16 @@ os_file_open(OS_AccessFlags flags, String8 path_not_zero_terminated)
   String8 path = push_str8_copy(scratch.arena, path_not_zero_terminated);
 
   int open_flags = 0;
-  if(flags & OS_AccessFlag_Read && (flags & OS_AccessFlag_Write) == 0) { open_flags |= O_RDONLY; }
-  if((flags & OS_AccessFlag_Read) == 0 && (flags & OS_AccessFlag_Write)) { open_flags |= O_WRONLY; }
+  // TODO(dmylo): other flags
+  if(flags & OS_AccessFlag_Write) 
+  {
+    open_flags |= O_WRONLY | O_CREAT; 
+  }
+  else 
+  {
+     open_flags |= O_RDONLY; 
+  }
+
 
   int fd = open((char*)path.str, open_flags);
   if(fd >= 0) 
@@ -1195,16 +1203,9 @@ os_file_write(OS_Handle file, Rng1U64 rng, void *data)
   int fd = lnx_handle_to_fd(file);
   if(fd < 0) return;
     
-  struct stat info;
-  int stat_result = fstat(fd, &info);
-  if(stat_result != 0) return;
-
-  U64 size = info.st_size;
-  Rng1U64 rng_clamped  = r1u64(ClampTop(rng.min, size), ClampTop(rng.max, size));
-
   U64 total_written = 0;
   {
-    U64 to_write = dim_1u64(rng_clamped);
+    U64 to_write = dim_1u64(rng);
     for(U64 offset = rng.min; total_written < to_write;)
     {
       size_t bytes_to_write = to_write - total_written;

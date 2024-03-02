@@ -1125,6 +1125,8 @@ os_graphical_message(B32 error, String8 title, String8 message)
 // dmylo: win32 OpenGL initialization stuff
 #if R_BACKEND == 2
 
+#pragma comment(lib, "opengl32")
+
 typedef HGLRC WINAPI wgl_create_context_attribs_arb(HDC hDC, HGLRC hShareContext,
                                                     const int *attribList);
 
