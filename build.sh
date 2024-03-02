@@ -51,7 +51,7 @@
 CC_FLAGS="-I../src -I../local -Wno-unused-function -Wno-writable-strings -Wno-unused-value -Wno-unused-variable -Wno-ignored-attributes -Wno-undefined-internal -Wno-unused-local-typedef -Wno-deprecated-register -Wno-deprecated-declarations -Wno-switch"
 CC_FLAGS_DEBUG="-O0 -g"
 CC_DEBUG="clang $CC_FLAGS $CC_FLAGS_DEBUG"
-CC_LINK="-pthread -lm"
+CC_LINK="-pthread -lm -lrt"
 
 # :: --- Per-Build Settings -----------------------------------------------------
 # set gfx=-DOS_FEATURE_GRAPHICAL=1
