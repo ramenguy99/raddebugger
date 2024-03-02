@@ -127,7 +127,7 @@ w32_os_key_from_vkey(WPARAM vkey)
   if (first){
     first = 0;
     MemoryZeroArray(key_table);
-    
+
     key_table[(unsigned int)'A'] = OS_Key_A;
     key_table[(unsigned int)'B'] = OS_Key_B;
     key_table[(unsigned int)'C'] = OS_Key_C;
@@ -154,7 +154,7 @@ w32_os_key_from_vkey(WPARAM vkey)
     key_table[(unsigned int)'X'] = OS_Key_X;
     key_table[(unsigned int)'Y'] = OS_Key_Y;
     key_table[(unsigned int)'Z'] = OS_Key_Z;
-    
+
     for (U64 i = '0', j = OS_Key_0; i <= '9'; i += 1, j += 1){
       key_table[i] = (OS_Key)j;
     }
@@ -164,7 +164,7 @@ w32_os_key_from_vkey(WPARAM vkey)
     for (U64 i = VK_F1, j = OS_Key_F1; i <= VK_F24; i += 1, j += 1){
       key_table[i] = (OS_Key)j;
     }
-    
+
     key_table[VK_SPACE]     = OS_Key_Space;
     key_table[VK_OEM_3]     = OS_Key_Tick;
     key_table[VK_OEM_MINUS] = OS_Key_Minus;
@@ -177,31 +177,31 @@ w32_os_key_from_vkey(WPARAM vkey)
     key_table[VK_OEM_PERIOD]= OS_Key_Period;
     key_table[VK_OEM_2]     = OS_Key_Slash;
     key_table[VK_OEM_5]     = OS_Key_BackSlash;
-    
+
     key_table[VK_TAB]       = OS_Key_Tab;
     key_table[VK_PAUSE]     = OS_Key_Pause;
     key_table[VK_ESCAPE]    = OS_Key_Esc;
-    
+
     key_table[VK_UP]        = OS_Key_Up;
     key_table[VK_LEFT]      = OS_Key_Left;
     key_table[VK_DOWN]      = OS_Key_Down;
     key_table[VK_RIGHT]     = OS_Key_Right;
-    
+
     key_table[VK_BACK]      = OS_Key_Backspace;
     key_table[VK_RETURN]    = OS_Key_Return;
-    
+
     key_table[VK_DELETE]    = OS_Key_Delete;
     key_table[VK_INSERT]    = OS_Key_Insert;
     key_table[VK_PRIOR]     = OS_Key_PageUp;
     key_table[VK_NEXT]      = OS_Key_PageDown;
     key_table[VK_HOME]      = OS_Key_Home;
     key_table[VK_END]       = OS_Key_End;
-    
+
     key_table[VK_CAPITAL]   = OS_Key_CapsLock;
     key_table[VK_NUMLOCK]   = OS_Key_NumLock;
     key_table[VK_SCROLL]    = OS_Key_ScrollLock;
     key_table[VK_APPS]      = OS_Key_Menu;
-    
+
     key_table[VK_CONTROL]   = OS_Key_Ctrl;
     key_table[VK_LCONTROL]  = OS_Key_Ctrl;
     key_table[VK_RCONTROL]  = OS_Key_Ctrl;
@@ -211,22 +211,22 @@ w32_os_key_from_vkey(WPARAM vkey)
     key_table[VK_MENU]      = OS_Key_Alt;
     key_table[VK_LMENU]     = OS_Key_Alt;
     key_table[VK_RMENU]     = OS_Key_Alt;
-    
+
     key_table[VK_DIVIDE]   = OS_Key_NumSlash;
     key_table[VK_MULTIPLY] = OS_Key_NumStar;
     key_table[VK_SUBTRACT] = OS_Key_NumMinus;
     key_table[VK_ADD]      = OS_Key_NumPlus;
     key_table[VK_DECIMAL]  = OS_Key_NumPeriod;
-    
+
     for (U32 i = 0; i < 10; i += 1){
       key_table[VK_NUMPAD0 + i] = (OS_Key)((U64)OS_Key_Num0 + i);
     }
-    
+
     for (U64 i = 0xDF, j = 0; i < 0xFF; i += 1, j += 1){
       key_table[i] = (OS_Key)((U64)OS_Key_Ex0 + j);
     }
   }
-  
+
   OS_Key key = key_table[vkey&bitmask8];
   return(key);
 }
@@ -339,37 +339,37 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
   ProfBeginFunction();
   LRESULT result = 0;
-  
+
   B32 good = 1;
   if(w32_event_arena == 0)
   {
     result = DefWindowProcW(hwnd, uMsg, wParam, lParam);
     good = 0;
   }
-  
+
   if(good)
   {
     W32_Window *window = w32_window_from_hwnd(hwnd);
     OS_Handle window_handle = os_window_from_w32_window(window);
     B32 release = 0;
-    
+
     switch(uMsg)
     {
       default:
       {
         result = DefWindowProcW(hwnd, uMsg, wParam, lParam);
       }break;
-      
+
       case WM_ENTERSIZEMOVE:
       {
         w32_resizing = 1;
       }break;
-      
+
       case WM_EXITSIZEMOVE:
       {
         w32_resizing = 0;
       }break;
-      
+
       case WM_SIZE:
       case WM_PAINT:
       {
@@ -385,12 +385,12 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
           result = DefWindowProcW(hwnd, uMsg, wParam, lParam);
         }
       }break;
-      
+
       case WM_CLOSE:
       {
         w32_push_event(OS_EventKind_WindowClose, window);
       }break;
-      
+
       case WM_LBUTTONUP:
       case WM_MBUTTONUP:
       case WM_RBUTTONUP:
@@ -428,14 +428,14 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
           SetCapture(hwnd);
         }
       }break;
-      
+
       case WM_MOUSEMOVE:
       {
         OS_Event *event = w32_push_event(OS_EventKind_MouseMove, window);
         event->pos.x = (F32)(S16)LOWORD(lParam);
         event->pos.y = (F32)(S16)HIWORD(lParam);
       }break;
-      
+
       case WM_MOUSEWHEEL:
       {
         S16 wheel_delta = HIWORD(wParam);
@@ -448,7 +448,7 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         event->pos.y = (F32)p.y;
         event->delta = v2f32(0.f, -(F32)wheel_delta);
       }break;
-      
+
       case WM_MOUSEHWHEEL:
       {
         S16 wheel_delta = HIWORD(wParam);
@@ -461,7 +461,7 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         event->pos.y = (F32)p.y;
         event->delta = v2f32((F32)wheel_delta, 0.f);
       }break;
-      
+
       case WM_SYSKEYDOWN: case WM_SYSKEYUP:
       {
         if(wParam != VK_MENU && (wParam < VK_F1 || VK_F24 < wParam || wParam == VK_F4))
@@ -473,7 +473,7 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
       {
         B32 was_down = (lParam & bit31);
         B32 is_down  = !(lParam & bit32);
-        
+
         B32 is_repeat = 0;
         if(!is_down)
         {
@@ -483,7 +483,7 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
           is_repeat = 1;
         }
-        
+
         B32 right_sided = 0;
         if ((lParam & bit25) &&
             (wParam == VK_CONTROL || wParam == VK_RCONTROL ||
@@ -492,7 +492,7 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
           right_sided = 1;
         }
-        
+
         OS_Event *event = w32_push_event(release ? OS_EventKind_Release : OS_EventKind_Press, window);
         event->key = w32_os_key_from_vkey(wParam);
         event->repeat_count = lParam & bitmask16;
@@ -502,12 +502,12 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         if(event->key == OS_Key_Ctrl  && event->flags & OS_EventFlag_Ctrl)  { event->flags &= ~OS_EventFlag_Ctrl; }
         if(event->key == OS_Key_Shift && event->flags & OS_EventFlag_Shift) { event->flags &= ~OS_EventFlag_Shift; }
       }break;
-      
+
       case WM_SYSCHAR:
       {
         result = DefWindowProcW(hwnd, uMsg, wParam, lParam);
       }break;
-      
+
       case WM_CHAR:
       {
         U32 character = wParam;
@@ -521,13 +521,13 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
           event->character = character;
         }
       }break;
-      
+
       case WM_KILLFOCUS:
       {
         w32_push_event(OS_EventKind_WindowLoseFocus, window);
         ReleaseCapture();
       }break;
-      
+
       case WM_SETCURSOR:
       {
         if(!w32_resizing &&
@@ -540,7 +540,7 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
           result = DefWindowProcW(hwnd, uMsg, wParam, lParam);
         }
       }break;
-      
+
       case WM_DPICHANGED:
       {
         F32 new_dpi = (F32)(wParam & 0xffff);
@@ -548,7 +548,7 @@ w32_wnd_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
       }break;
     }
   }
-  
+
   ProfEnd();
   return result;
 }
@@ -573,10 +573,10 @@ os_graphical_init(void)
 {
   //- rjf: grab TID of thread which is doing graphics
   w32_gfx_thread_tid = (U32)GetCurrentThreadId();
-  
+
   //- rjf: grab hinstance
   w32_h_instance = GetModuleHandle(0);
-  
+
   //- rjf: set dpi awareness
   w32_SetProcessDpiAwarenessContext_Type *SetProcessDpiAwarenessContext_func = 0;
   HMODULE module = LoadLibraryA("user32.dll");
@@ -592,7 +592,7 @@ os_graphical_init(void)
   {
     SetProcessDpiAwarenessContext_func(w32_DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   }
-  
+
   //- rjf: register graphical-window class
   {
     WNDCLASSEXW wndclass = {sizeof(wndclass)};
@@ -604,7 +604,7 @@ os_graphical_init(void)
     ATOM wndatom = RegisterClassExW(&wndclass);
     (void)wndatom;
   }
-  
+
   //- rjf: grab refresh rate
   {
     DEVMODEW devmodew = {0};
@@ -613,7 +613,7 @@ os_graphical_init(void)
       w32_default_refresh_rate = (F32)devmodew.dmDisplayFrequency;
     }
   }
-  
+
   //- rjf: set initial cursor
   os_set_cursor(OS_Cursor_Pointer);
 }
@@ -686,7 +686,7 @@ os_window_open(Vec2F32 resolution, String8 title)
                            0);
     scratch_end(scratch);
   }
-  
+
   //- rjf- make/fill window
   W32_Window *window = w32_allocate_window();
   {
@@ -698,7 +698,7 @@ os_window_open(Vec2F32 resolution, String8 title)
       window->dpi = 96.f;
     }
   }
-  
+
   //- rjf: convert to handle + return
   return os_window_from_w32_window(window);
 }
@@ -1047,7 +1047,7 @@ internal void
 os_set_cursor(OS_Cursor cursor)
 {
   B32 valid_cursor = 1;
-  
+
   HCURSOR hcursor = 0;
   switch(cursor)
   {
@@ -1070,7 +1070,7 @@ hcursor = curs; }break;
 #undef CursorCase
 #undef Win32CursorXList
   }
-  
+
   if(valid_cursor && !w32_resizing)
   {
     if(hcursor != w32_hcursor)
@@ -1123,6 +1123,8 @@ os_graphical_message(B32 error, String8 title, String8 message)
 
 // TODO: move this
 // dmylo: win32 OpenGL initialization stuff
+#if R_BACKEND == 2
+
 typedef HGLRC WINAPI wgl_create_context_attribs_arb(HDC hDC, HGLRC hShareContext,
                                                     const int *attribList);
 
@@ -1139,7 +1141,7 @@ HWND w32_dummy_window;
 HDC w32_dummy_window_dc;
 HGLRC w32_glrc;
 
-internal void           
+internal void
 os_init_opengl(R_OGL_Functions* gl_functions)
 {
   //- dmylo: Create a fake window to initialize an old OpenGL context
@@ -1269,7 +1271,7 @@ os_init_opengl(R_OGL_Functions* gl_functions)
         0
     };
 
-    w32_glrc = r_ogl_state->wglCreateContextAttribsARB(w32_dummy_window_dc, 0, attribs);
+    w32_glrc = wglCreateContextAttribsARB(w32_dummy_window_dc, 0, attribs);
     ok = wglMakeCurrent(w32_dummy_window_dc, w32_glrc);
     if(!ok) {
       char buffer[256] = {0};
@@ -1308,28 +1310,37 @@ os_init_opengl(R_OGL_Functions* gl_functions)
 }
 
 internal void
-os_window_equip_opengl(OS_Handle window)
+os_window_equip_opengl(OS_Handle handle)
 {
-  W32_Window *w32_layer_window = w32_window_from_os_window(handle);
-  HWND hwnd = w32_hwnd_from_window(w32_layer_window);
+  W32_Window *window = w32_window_from_os_window(handle);
+  HWND hwnd = w32_hwnd_from_window(window);
 
   window->dc = GetDC(hwnd);
   SetPixelFormat(window->dc, w32_pixel_format_index, &w32_pixel_format);
 }
 
 internal void
-os_window_unequip_opengl(OS_Handle window)
+os_window_unequip_opengl(OS_Handle handle)
 {
-  W32_Window *w32_layer_window = w32_window_from_os_window(handle);
-  HWND hwnd = w32_hwnd_from_window(w32_layer_window);
+  W32_Window *window = w32_window_from_os_window(handle);
+  HWND hwnd = w32_hwnd_from_window(window);
 
   ReleaseDC(hwnd, window->dc);
 }
 
 internal void
-os_window_bind_opengl_contex(OS_Handle window)
+os_window_begin_frame_opengl(OS_Handle handle)
 {
-  W32_Window *w32_layer_window = w32_window_from_os_window(window_handle);
-  
-  bool ok = wglMakeCurrent(window->dc, r_ogl_state->glrc);
+  W32_Window *window = w32_window_from_os_window(handle);
+
+  bool ok = wglMakeCurrent(window->dc, w32_glrc);
 }
+
+internal void
+os_window_end_frame_opengl(OS_Handle handle)
+{
+  W32_Window *window = w32_window_from_os_window(handle);
+  SwapBuffers(window->dc);
+}
+
+#endif

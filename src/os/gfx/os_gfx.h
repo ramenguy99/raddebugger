@@ -169,6 +169,7 @@ struct R_OGL_Functions;
 internal void           os_init_opengl(R_OGL_Functions* ogl_functions);
 internal void           os_window_equip_opengl(OS_Handle window);
 internal void           os_window_unequip_opengl(OS_Handle window);
-internal void           os_window_bind_opengl_contex(OS_Handle window);
+internal void           os_window_begin_frame_opengl(OS_Handle window);
+internal void           os_window_end_frame_opengl(OS_Handle window);
 
 #endif // OS_GRAPHICAL_H

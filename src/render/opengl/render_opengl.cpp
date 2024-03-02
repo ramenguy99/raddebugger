@@ -399,7 +399,7 @@ r_window_unequip(OS_Handle window_handle, R_Handle equip_handle)
     if(window->geo3d_depth)         { gl.DeleteTextures(1, &window->geo3d_depth); }
 
     //- dmylo: os-specific opengl window teardown
-    os_window_unequip_opengl(OS_Handle window)
+    os_window_unequip_opengl(window_handle);
 
     SLLStackPush(r_ogl_state->first_free_window, window);
   }
@@ -653,7 +653,7 @@ r_window_begin_frame(OS_Handle window_handle, R_Handle window_equip)
   OS_MutexScopeW(r_ogl_state->device_rw_mutex)
   {
     //- dmylo: bind context to the window
-    os_window_bind_opengl_context(window_handle);
+    os_window_begin_frame_opengl(window_handle);
 
     //- dmylo: get opengl window
     R_OGL_Window *window = r_ogl_window_from_handle(window_equip);
@@ -769,7 +769,7 @@ r_window_end_frame(OS_Handle window_handle, R_Handle window_equip)
       gl.DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
 
-    SwapBuffers(window->dc);
+    os_window_end_frame_opengl(window_handle);
   }
   ProfEnd();
 }
