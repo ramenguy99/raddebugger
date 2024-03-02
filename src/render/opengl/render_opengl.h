@@ -96,8 +96,6 @@ struct R_OGL_Window
   GLuint geo3d_depth;
 
   Vec2S32 last_resolution;
-
-  HDC dc;
 };
 
 struct R_OGL_FlushBuffer
@@ -121,27 +119,11 @@ struct R_OGL_Tex2DFormat {
   GLenum data_type;
 };
 
-typedef HGLRC WINAPI wgl_create_context_attribs_arb(HDC hDC, HGLRC hShareContext,
-                                                    const int *attribList);
-typedef BOOL wgl_choose_pixel_format_arb(HDC hdc, const int *piAttribIList,
-                                         const FLOAT *pfAttribFList, UINT nMaxFormats,
-                                         int *piFormats, UINT *nNumFormats);
-
 struct R_OGL_State
 {
   // dmylo: OpenGL loaded functions
   bool initialized;
   R_OGL_Functions gl_functions;
-
-  // dmylo: win32 OpenGL initialization stuff
-  HGLRC glrc;
-  wgl_create_context_attribs_arb *wglCreateContextAttribsARB;
-  wgl_choose_pixel_format_arb *wglChoosePixelFormatARB;
-  PIXELFORMATDESCRIPTOR pixel_format;
-  int pixel_format_index;
-  HWND dummy_window;
-  HDC dummy_window_dc;
-
 
   // dmylo: state
   Arena        *arena;

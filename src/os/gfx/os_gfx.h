@@ -163,4 +163,12 @@ internal F32            os_default_refresh_rate(void);
 
 internal void           os_graphical_message(B32 error, String8 title, String8 message);
 
+////////////////////////////////
+//~ rjf: @os_hooks OpenGL specific (Implemented Per-OS)
+struct R_OGL_Functions;
+internal void           os_init_opengl(R_OGL_Functions* ogl_functions);
+internal void           os_window_equip_opengl(OS_Handle window);
+internal void           os_window_unequip_opengl(OS_Handle window);
+internal void           os_window_bind_opengl_contex(OS_Handle window);
+
 #endif // OS_GRAPHICAL_H

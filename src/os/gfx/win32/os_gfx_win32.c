@@ -1119,3 +1119,217 @@ os_graphical_message(B32 error, String8 title, String8 message)
   MessageBoxW(0, (WCHAR *)message16.str, (WCHAR *)title16.str, MB_OK|(!!error*MB_ICONERROR));
   scratch_end(scratch);
 }
+
+
+// TODO: move this
+// dmylo: win32 OpenGL initialization stuff
+typedef HGLRC WINAPI wgl_create_context_attribs_arb(HDC hDC, HGLRC hShareContext,
+                                                    const int *attribList);
+
+typedef BOOL wgl_choose_pixel_format_arb(HDC hdc, const int *piAttribIList,
+                                         const FLOAT *pfAttribFList, UINT nMaxFormats,
+                                         int *piFormats, UINT *nNumFormats);
+
+wgl_create_context_attribs_arb *wglCreateContextAttribsARB;
+wgl_choose_pixel_format_arb *wglChoosePixelFormatARB;
+
+PIXELFORMATDESCRIPTOR w32_pixel_format;
+int w32_pixel_format_index;
+HWND w32_dummy_window;
+HDC w32_dummy_window_dc;
+HGLRC w32_glrc;
+
+internal void           
+os_init_opengl(R_OGL_Functions* gl_functions)
+{
+  //- dmylo: Create a fake window to initialize an old OpenGL context
+  // and retrieve the functions required to initialize a modern one.
+  {
+    HINSTANCE instance = GetModuleHandleA(NULL);
+
+    WNDCLASSEXA wcex = {};
+    wcex.cbSize = sizeof(wcex);
+    wcex.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wcex.lpfnWndProc = DefWindowProcA;
+    wcex.hInstance = instance;
+    wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wcex.lpszClassName = "DummyOpenGLWindowClass";
+    RegisterClassExA(&wcex);
+
+    HWND old_window = CreateWindowExA(0,
+      "DummyOpenGLWindowClass", "old_dummy",  // window class, title
+      WS_OVERLAPPEDWINDOW,                    // style
+      CW_USEDEFAULT, CW_USEDEFAULT,           // position x, y
+      1, 1,                                   // width, height
+      NULL, NULL,                             // parent window, menu
+      instance, NULL);                        // instance, param
+
+    HDC old_dc = GetDC(old_window);
+
+    PIXELFORMATDESCRIPTOR desired_format = {};
+    desired_format.nSize = sizeof(PIXELFORMATDESCRIPTOR);
+    desired_format.nVersion = 1;
+    desired_format.dwFlags = PFD_DOUBLEBUFFER | PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW;
+    desired_format.iPixelType = PFD_TYPE_RGBA;
+    desired_format.cColorBits = 32;
+    desired_format.cAlphaBits = 8;
+    desired_format.cDepthBits = 24;
+    desired_format.cStencilBits = 8;
+    desired_format.iLayerType = PFD_MAIN_PLANE;
+
+    int suggested_format_index = ChoosePixelFormat(old_dc, &desired_format);
+
+    PIXELFORMATDESCRIPTOR suggested_format = {};
+    DescribePixelFormat(old_dc, suggested_format_index, sizeof(PIXELFORMATDESCRIPTOR), &suggested_format);
+    SetPixelFormat(old_dc, suggested_format_index, &suggested_format);
+
+    HGLRC old_glrc = wglCreateContext(old_dc);
+    BOOL ok = wglMakeCurrent(old_dc, old_glrc);
+
+    wglCreateContextAttribsARB = (wgl_create_context_attribs_arb*)wglGetProcAddress("wglCreateContextAttribsARB");
+    wglChoosePixelFormatARB = (wgl_choose_pixel_format_arb*)wglGetProcAddress("wglChoosePixelFormatARB");
+
+    if(!ok) {
+      char buffer[256] = {0};
+      raddbg_snprintf(buffer, sizeof(buffer), "OpenGL fake context initialization failed (win32 error code: %d)", GetLastError());
+      os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
+      os_exit_process(1);
+    }
+
+    // dmylo: Create an other dummy window with the modern context.
+    // This will persist for the whole duration of the application.
+    w32_dummy_window = CreateWindowExA(0,
+      "DummyOpenGLWindowClass", "modern_dummy", // window class, title
+      WS_OVERLAPPEDWINDOW,                      // style
+      CW_USEDEFAULT, CW_USEDEFAULT,             // position x, y
+      1, 1,                                     // width, height
+      NULL, NULL,                               // parent window, menu
+      instance, NULL);                          // instance, param
+
+    w32_dummy_window_dc = GetDC(w32_dummy_window);
+
+#define WGL_DRAW_TO_WINDOW_ARB                  0x2001
+#define WGL_SUPPORT_OPENGL_ARB                  0x2010
+#define WGL_DOUBLE_BUFFER_ARB                   0x2011
+#define WGL_PIXEL_TYPE_ARB                      0x2013
+#define WGL_COLOR_BITS_ARB                      0x2014
+#define WGL_ALPHA_BITS_ARB                      0x201B
+#define WGL_DEPTH_BITS_ARB                      0x2022
+#define WGL_STENCIL_BITS_ARB                    0x2023
+#define WGL_TYPE_RGBA_ARB                       0x202B
+#define WGL_SAMPLE_BUFFERS_ARB                  0x2041
+#define WGL_SAMPLES_ARB                         0x2042
+
+    // dmylo: set the pixel format of the new window, this is what
+    // every future window will also use.
+    const int pixel_attributes[] =
+    {
+        WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
+        WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
+        WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
+        WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
+        WGL_ALPHA_BITS_ARB,     8,
+        WGL_COLOR_BITS_ARB,     32,
+        WGL_DEPTH_BITS_ARB,     24,
+        WGL_STENCIL_BITS_ARB,   8,
+        // WGL_SAMPLE_BUFFERS_ARB, 0, // Number of buffers
+        // WGL_SAMPLES_ARB, 1,        // Number of samples
+        0
+    };
+
+    UINT num_suggestions;
+    wglChoosePixelFormatARB(w32_dummy_window_dc, pixel_attributes, 0, 1, &suggested_format_index, &num_suggestions);
+    DescribePixelFormat(w32_dummy_window_dc, suggested_format_index, sizeof(PIXELFORMATDESCRIPTOR), &suggested_format);
+    SetPixelFormat(w32_dummy_window_dc, suggested_format_index, &suggested_format);
+
+    // dmylo: save pixel format information for future windows
+    w32_pixel_format = suggested_format;
+    w32_pixel_format_index = suggested_format_index;
+
+#define WGL_CONTEXT_MAJOR_VERSION_ARB           0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB           0x2092
+#define WGL_CONTEXT_LAYER_PLANE_ARB             0x2093
+#define WGL_CONTEXT_FLAGS_ARB                   0x2094
+#define WGL_CONTEXT_PROFILE_MASK_ARB            0x9126
+#define WGL_CONTEXT_DEBUG_BIT_ARB               0x0001
+#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB  0x0002
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB        0x0001
+#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
+
+    // dmylo: create a modern context
+    int attribs[] =
+    {
+        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 1,
+        WGL_CONTEXT_FLAGS_ARB,
+        // WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB disable stuff prior to 3.0
+        /*WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB |*/ WGL_CONTEXT_DEBUG_BIT_ARB,
+        WGL_CONTEXT_PROFILE_MASK_ARB,
+        WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+        0
+    };
+
+    w32_glrc = r_ogl_state->wglCreateContextAttribsARB(w32_dummy_window_dc, 0, attribs);
+    ok = wglMakeCurrent(w32_dummy_window_dc, w32_glrc);
+    if(!ok) {
+      char buffer[256] = {0};
+      raddbg_snprintf(buffer, sizeof(buffer), "OpenGL modern context initialization failed (win32 error code: %d)", GetLastError());
+      os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
+      os_exit_process(1);
+    }
+
+    //- dmylo: Now that we have a modern context, cleanup the old context and the old window.
+    wglDeleteContext(old_glrc);
+    ReleaseDC(old_window, old_dc);
+    DestroyWindow(old_window);
+  }
+
+  //-dmylo: Load OpenGL function and initialize state for the various passes
+  {
+    // dmylo: Load function pointers.
+    HMODULE opengl_module = LoadLibraryA("opengl32.dll");
+    for (U64 i = 0; i < ArrayCount(r_ogl_g_function_names); i++)
+    {
+      void* ptr = wglGetProcAddress(r_ogl_g_function_names[i]);
+      if(!ptr) {
+        // dmylo: older functions are still in opengl32, so we also try that.
+        ptr = GetProcAddress(opengl_module, r_ogl_g_function_names[i]);
+      }
+      if(!ptr) {
+        // dmylo: if still not found error out.
+        char buffer[256] = {0};
+        raddbg_snprintf(buffer, sizeof(buffer), "Failed to load OpenGL function: %s", r_ogl_g_function_names[i]);
+        os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
+        os_exit_process(1);
+      }
+      gl_functions->_pointers[i] = ptr;
+    }
+  }
+}
+
+internal void
+os_window_equip_opengl(OS_Handle window)
+{
+  W32_Window *w32_layer_window = w32_window_from_os_window(handle);
+  HWND hwnd = w32_hwnd_from_window(w32_layer_window);
+
+  window->dc = GetDC(hwnd);
+  SetPixelFormat(window->dc, w32_pixel_format_index, &w32_pixel_format);
+}
+
+internal void
+os_window_unequip_opengl(OS_Handle window)
+{
+  W32_Window *w32_layer_window = w32_window_from_os_window(handle);
+  HWND hwnd = w32_hwnd_from_window(w32_layer_window);
+
+  ReleaseDC(hwnd, window->dc);
+}
+
+internal void
+os_window_bind_opengl_contex(OS_Handle window)
+{
+  W32_Window *w32_layer_window = w32_window_from_os_window(window_handle);
+  
+  bool ok = wglMakeCurrent(window->dc, r_ogl_state->glrc);
+}

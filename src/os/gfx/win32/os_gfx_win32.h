@@ -22,6 +22,9 @@ struct W32_Window
   F32 dpi;
   B32 first_paint_done;
   B32 maximized;
+  
+  // TODO: opengl only
+  HDC dc;
 };
 
 ////////////////////////////////

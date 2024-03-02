@@ -267,238 +267,79 @@ r_init(CmdLine *cmdln)
     r_ogl_state->upload_arena = arena_alloc();
   }
 
-  //- dmylo: Create a fake window to initialize an old OpenGL context
-  // and retrieve the functions required to initialize a modern one.
+  //- dmylo: os specific opengl context initialization
   {
-    HINSTANCE instance = GetModuleHandleA(NULL);
-
-    WNDCLASSEXA wcex = {};
-    wcex.cbSize = sizeof(wcex);
-    wcex.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    wcex.lpfnWndProc = DefWindowProcA;
-    wcex.hInstance = instance;
-    wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wcex.lpszClassName = "DummyOpenGLWindowClass";
-    RegisterClassExA(&wcex);
-
-    HWND old_window = CreateWindowExA(0,
-      "DummyOpenGLWindowClass", "old_dummy",  // window class, title
-      WS_OVERLAPPEDWINDOW,                    // style
-      CW_USEDEFAULT, CW_USEDEFAULT,           // position x, y
-      1, 1,                                   // width, height
-      NULL, NULL,                             // parent window, menu
-      instance, NULL);                        // instance, param
-
-    HDC old_dc = GetDC(old_window);
-
-    PIXELFORMATDESCRIPTOR desired_format = {};
-    desired_format.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-    desired_format.nVersion = 1;
-    desired_format.dwFlags = PFD_DOUBLEBUFFER | PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW;
-    desired_format.iPixelType = PFD_TYPE_RGBA;
-    desired_format.cColorBits = 32;
-    desired_format.cAlphaBits = 8;
-    desired_format.cDepthBits = 24;
-    desired_format.cStencilBits = 8;
-    desired_format.iLayerType = PFD_MAIN_PLANE;
-
-    int suggested_format_index = ChoosePixelFormat(old_dc, &desired_format);
-
-    PIXELFORMATDESCRIPTOR suggested_format = {};
-    DescribePixelFormat(old_dc, suggested_format_index, sizeof(PIXELFORMATDESCRIPTOR), &suggested_format);
-    SetPixelFormat(old_dc, suggested_format_index, &suggested_format);
-
-    HGLRC old_glrc = wglCreateContext(old_dc);
-    BOOL ok = wglMakeCurrent(old_dc, old_glrc);
-
-    r_ogl_state->wglCreateContextAttribsARB = (wgl_create_context_attribs_arb*)wglGetProcAddress("wglCreateContextAttribsARB");
-    r_ogl_state->wglChoosePixelFormatARB = (wgl_choose_pixel_format_arb*)wglGetProcAddress("wglChoosePixelFormatARB");
-
-    if(!ok) {
-      char buffer[256] = {0};
-      raddbg_snprintf(buffer, sizeof(buffer), "OpenGL fake context initialization failed (win32 error code: %d)", GetLastError());
-      os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
-      os_exit_process(1);
-    }
-
-    // dmylo: Create an other dummy window with the modern context.
-    // This will persist for the whole duration of the application.
-    r_ogl_state->dummy_window = CreateWindowExA(0,
-      "DummyOpenGLWindowClass", "modern_dummy", // window class, title
-      WS_OVERLAPPEDWINDOW,                      // style
-      CW_USEDEFAULT, CW_USEDEFAULT,             // position x, y
-      1, 1,                                     // width, height
-      NULL, NULL,                               // parent window, menu
-      instance, NULL);                          // instance, param
-
-    r_ogl_state->dummy_window_dc = GetDC(r_ogl_state->dummy_window);
-
-#define WGL_DRAW_TO_WINDOW_ARB                  0x2001
-#define WGL_SUPPORT_OPENGL_ARB                  0x2010
-#define WGL_DOUBLE_BUFFER_ARB                   0x2011
-#define WGL_PIXEL_TYPE_ARB                      0x2013
-#define WGL_COLOR_BITS_ARB                      0x2014
-#define WGL_ALPHA_BITS_ARB                      0x201B
-#define WGL_DEPTH_BITS_ARB                      0x2022
-#define WGL_STENCIL_BITS_ARB                    0x2023
-#define WGL_TYPE_RGBA_ARB                       0x202B
-#define WGL_SAMPLE_BUFFERS_ARB                  0x2041
-#define WGL_SAMPLES_ARB                         0x2042
-
-    // dmylo: set the pixel format of the new window, this is what
-    // every future window will also use.
-    const int pixel_attributes[] =
-    {
-        WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
-        WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
-        WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
-        WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
-        WGL_ALPHA_BITS_ARB,     8,
-        WGL_COLOR_BITS_ARB,     32,
-        WGL_DEPTH_BITS_ARB,     24,
-        WGL_STENCIL_BITS_ARB,   8,
-        // WGL_SAMPLE_BUFFERS_ARB, 0, // Number of buffers
-        // WGL_SAMPLES_ARB, 1,        // Number of samples
-        0
-    };
-
-    UINT num_suggestions;
-    r_ogl_state->wglChoosePixelFormatARB(r_ogl_state->dummy_window_dc, pixel_attributes, 0, 1, &suggested_format_index, &num_suggestions);
-    DescribePixelFormat(r_ogl_state->dummy_window_dc, suggested_format_index, sizeof(PIXELFORMATDESCRIPTOR), &suggested_format);
-    SetPixelFormat(r_ogl_state->dummy_window_dc, suggested_format_index, &suggested_format);
-
-    // dmylo: save pixel format information for future windows
-    r_ogl_state->pixel_format = suggested_format;
-    r_ogl_state->pixel_format_index = suggested_format_index;
-
-#define WGL_CONTEXT_MAJOR_VERSION_ARB           0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB           0x2092
-#define WGL_CONTEXT_LAYER_PLANE_ARB             0x2093
-#define WGL_CONTEXT_FLAGS_ARB                   0x2094
-#define WGL_CONTEXT_PROFILE_MASK_ARB            0x9126
-#define WGL_CONTEXT_DEBUG_BIT_ARB               0x0001
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB  0x0002
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB        0x0001
-#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
-
-    // dmylo: create a modern context
-    int attribs[] =
-    {
-        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 1,
-        WGL_CONTEXT_FLAGS_ARB,
-        // WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB disable stuff prior to 3.0
-        /*WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB |*/ WGL_CONTEXT_DEBUG_BIT_ARB,
-        WGL_CONTEXT_PROFILE_MASK_ARB,
-        WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-        0
-    };
-
-    r_ogl_state->glrc = r_ogl_state->wglCreateContextAttribsARB(r_ogl_state->dummy_window_dc, 0, attribs);
-    ok = wglMakeCurrent(r_ogl_state->dummy_window_dc, r_ogl_state->glrc);
-    if(!ok) {
-      char buffer[256] = {0};
-      raddbg_snprintf(buffer, sizeof(buffer), "OpenGL modern context initialization failed (win32 error code: %d)", GetLastError());
-      os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
-      os_exit_process(1);
-    }
-
-    //- dmylo: Now that we have a modern context, cleanup the old context and the old window.
-    wglDeleteContext(old_glrc);
-    ReleaseDC(old_window, old_dc);
-    DestroyWindow(old_window);
+    os_init_opengl(&r_ogl_state->gl_functions);
   }
 
-  //-dmylo: Load OpenGL function and initialize state for the various passes
+  //- dmylo: UI pass
   {
-    // dmylo: Load function pointers.
-    HMODULE opengl_module = LoadLibraryA("opengl32.dll");
-    for (U64 i = 0; i < ArrayCount(r_ogl_g_function_names); i++)
+    // buffers
+    gl.GenBuffers(1, &r_ogl_state->instance_scratch_buffer_64kb);
+    gl.BindBuffer(GL_ARRAY_BUFFER, r_ogl_state->instance_scratch_buffer_64kb);
+
+    // vao
+    gl.GenVertexArrays(1, &r_ogl_state->rect_vao);
+
+    // shaders
+    GLuint rect_vs = r_ogl_compile_shader(r_ogl_g_rect_common_src, r_ogl_g_rect_vs_src, GL_VERTEX_SHADER);
+    GLuint rect_fs = r_ogl_compile_shader(r_ogl_g_rect_common_src, r_ogl_g_rect_fs_src, GL_FRAGMENT_SHADER);
+    r_ogl_state->rect_shader = r_ogl_link_shaders(rect_vs, rect_fs);
+
+    // uniforms
+    gl.GenBuffers(1, &r_ogl_state->rect_uniform_buffer);
+    gl.BindBuffer(GL_UNIFORM_BUFFER, r_ogl_state->rect_uniform_buffer);
+    r_ogl_state->rect_uniform_block_index = gl.GetUniformBlockIndex(r_ogl_state->rect_shader, "Globals");
+  }
+
+  //- dmylo: Blur pass
+  {
+    // shaders
+    GLuint blur_vs = r_ogl_compile_shader(r_ogl_g_blur_common_src, r_ogl_g_blur_vs_src, GL_VERTEX_SHADER);
+    GLuint blur_fs = r_ogl_compile_shader(r_ogl_g_blur_common_src, r_ogl_g_blur_fs_src, GL_FRAGMENT_SHADER);
+    r_ogl_state->blur_shader = r_ogl_link_shaders(blur_vs, blur_fs);
+
+    // uniforms
+    gl.GenBuffers(1, &r_ogl_state->blur_uniform_buffer);
+    gl.BindBuffer(GL_UNIFORM_BUFFER, r_ogl_state->blur_uniform_buffer);
+    r_ogl_state->blur_uniform_block_index = gl.GetUniformBlockIndex(r_ogl_state->blur_shader, "Globals");
+    r_ogl_state->blur_direction_uniform_location = gl.GetUniformLocation(r_ogl_state->blur_shader, "u_direction");
+  }
+
+  //- dmylo: Geo3D pass
+  {
+    // vao
+    gl.GenVertexArrays(1, &r_ogl_state->geo3d_vao);
+
+    // geo shaders
+    GLuint geo3d_vs = r_ogl_compile_shader(r_ogl_g_mesh_common_src, r_ogl_g_mesh_vs_src, GL_VERTEX_SHADER);
+    GLuint geo3d_fs = r_ogl_compile_shader(r_ogl_g_mesh_common_src, r_ogl_g_mesh_fs_src, GL_FRAGMENT_SHADER);
+    r_ogl_state->geo3d_shader = r_ogl_link_shaders(geo3d_vs, geo3d_fs);
+
+    // uniforms
+    r_ogl_state->geo3d_uniform_location = gl.GetUniformLocation(r_ogl_state->geo3d_shader, "xform");
+
+    // composite shaders
+    GLuint geo3dcomposite_vs = r_ogl_compile_shader(r_ogl_g_geo3dcomposite_common_src, r_ogl_g_geo3dcomposite_vs_src, GL_VERTEX_SHADER);
+    GLuint geo3dcomposite_fs = r_ogl_compile_shader(r_ogl_g_geo3dcomposite_common_src, r_ogl_g_geo3dcomposite_fs_src, GL_FRAGMENT_SHADER);
+    r_ogl_state->geo3dcomposite_shader = r_ogl_link_shaders(geo3dcomposite_vs, geo3dcomposite_fs);
+  }
+
+  //- dmylo: Finalize
+  {
+    GLuint finalize_vs = r_ogl_compile_shader(r_ogl_g_finalize_common_src, r_ogl_g_finalize_vs_src, GL_VERTEX_SHADER);
+    GLuint finalize_fs = r_ogl_compile_shader(r_ogl_g_finalize_common_src, r_ogl_g_finalize_fs_src, GL_FRAGMENT_SHADER);
+    r_ogl_state->finalize_shader = r_ogl_link_shaders(finalize_vs, finalize_fs);
+  }
+
+  //- dmylo: backup texture
+  {
+    U32 backup_texture_data[] =
     {
-      void* ptr = wglGetProcAddress(r_ogl_g_function_names[i]);
-      if(!ptr) {
-        // dmylo: older functions are still in opengl32, so we also try that.
-        ptr = GetProcAddress(opengl_module, r_ogl_g_function_names[i]);
-      }
-      if(!ptr) {
-        // dmylo: if still not found error out.
-        char buffer[256] = {0};
-        raddbg_snprintf(buffer, sizeof(buffer), "Failed to load OpenGL function: %s", r_ogl_g_function_names[i]);
-        os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
-        os_exit_process(1);
-      }
-      r_ogl_state->gl_functions._pointers[i] = ptr;
-    }
-
-    //- dmylo: UI pass
-    {
-      // buffers
-      gl.GenBuffers(1, &r_ogl_state->instance_scratch_buffer_64kb);
-      gl.BindBuffer(GL_ARRAY_BUFFER, r_ogl_state->instance_scratch_buffer_64kb);
-
-      // vao
-      gl.GenVertexArrays(1, &r_ogl_state->rect_vao);
-
-      // shaders
-      GLuint rect_vs = r_ogl_compile_shader(r_ogl_g_rect_common_src, r_ogl_g_rect_vs_src, GL_VERTEX_SHADER);
-      GLuint rect_fs = r_ogl_compile_shader(r_ogl_g_rect_common_src, r_ogl_g_rect_fs_src, GL_FRAGMENT_SHADER);
-      r_ogl_state->rect_shader = r_ogl_link_shaders(rect_vs, rect_fs);
-
-      // uniforms
-      gl.GenBuffers(1, &r_ogl_state->rect_uniform_buffer);
-      gl.BindBuffer(GL_UNIFORM_BUFFER, r_ogl_state->rect_uniform_buffer);
-      r_ogl_state->rect_uniform_block_index = gl.GetUniformBlockIndex(r_ogl_state->rect_shader, "Globals");
-    }
-
-    //- dmylo: Blur pass
-    {
-      // shaders
-      GLuint blur_vs = r_ogl_compile_shader(r_ogl_g_blur_common_src, r_ogl_g_blur_vs_src, GL_VERTEX_SHADER);
-      GLuint blur_fs = r_ogl_compile_shader(r_ogl_g_blur_common_src, r_ogl_g_blur_fs_src, GL_FRAGMENT_SHADER);
-      r_ogl_state->blur_shader = r_ogl_link_shaders(blur_vs, blur_fs);
-
-      // uniforms
-      gl.GenBuffers(1, &r_ogl_state->blur_uniform_buffer);
-      gl.BindBuffer(GL_UNIFORM_BUFFER, r_ogl_state->blur_uniform_buffer);
-      r_ogl_state->blur_uniform_block_index = gl.GetUniformBlockIndex(r_ogl_state->blur_shader, "Globals");
-      r_ogl_state->blur_direction_uniform_location = gl.GetUniformLocation(r_ogl_state->blur_shader, "u_direction");
-    }
-
-    //- dmylo: Geo3D pass
-    {
-      // vao
-      gl.GenVertexArrays(1, &r_ogl_state->geo3d_vao);
-
-      // geo shaders
-      GLuint geo3d_vs = r_ogl_compile_shader(r_ogl_g_mesh_common_src, r_ogl_g_mesh_vs_src, GL_VERTEX_SHADER);
-      GLuint geo3d_fs = r_ogl_compile_shader(r_ogl_g_mesh_common_src, r_ogl_g_mesh_fs_src, GL_FRAGMENT_SHADER);
-      r_ogl_state->geo3d_shader = r_ogl_link_shaders(geo3d_vs, geo3d_fs);
-
-      // uniforms
-      r_ogl_state->geo3d_uniform_location = gl.GetUniformLocation(r_ogl_state->geo3d_shader, "xform");
-
-      // composite shaders
-      GLuint geo3dcomposite_vs = r_ogl_compile_shader(r_ogl_g_geo3dcomposite_common_src, r_ogl_g_geo3dcomposite_vs_src, GL_VERTEX_SHADER);
-      GLuint geo3dcomposite_fs = r_ogl_compile_shader(r_ogl_g_geo3dcomposite_common_src, r_ogl_g_geo3dcomposite_fs_src, GL_FRAGMENT_SHADER);
-      r_ogl_state->geo3dcomposite_shader = r_ogl_link_shaders(geo3dcomposite_vs, geo3dcomposite_fs);
-    }
-
-    //- dmylo: Finalize
-    {
-      GLuint finalize_vs = r_ogl_compile_shader(r_ogl_g_finalize_common_src, r_ogl_g_finalize_vs_src, GL_VERTEX_SHADER);
-      GLuint finalize_fs = r_ogl_compile_shader(r_ogl_g_finalize_common_src, r_ogl_g_finalize_fs_src, GL_FRAGMENT_SHADER);
-      r_ogl_state->finalize_shader = r_ogl_link_shaders(finalize_vs, finalize_fs);
-    }
-
-    //- dmylo: backup texture
-    {
-      U32 backup_texture_data[] =
-      {
-        0xff00ffff, 0x330033ff,
-        0x330033ff, 0xff00ffff,
-      };
-      r_ogl_state->backup_texture = r_tex2d_alloc(R_Tex2DKind_Static, v2s32(2, 2), R_Tex2DFormat_RGBA8, backup_texture_data);
-    }
+      0xff00ffff, 0x330033ff,
+      0x330033ff, 0xff00ffff,
+    };
+    r_ogl_state->backup_texture = r_tex2d_alloc(R_Tex2DKind_Static, v2s32(2, 2), R_Tex2DFormat_RGBA8, backup_texture_data);
   }
 }
 
@@ -529,16 +370,8 @@ r_window_equip(OS_Handle handle)
       window->generation += 1;
     }
 
-    //- dmylo: map os window handle -> hwnd
-    HWND hwnd = {0};
-    {
-      W32_Window *w32_layer_window = w32_window_from_os_window(handle);
-      hwnd = w32_hwnd_from_window(w32_layer_window);
-    }
-
-    //- dmylo: set pixel format on this window.
-    window->dc = GetDC(hwnd);
-    SetPixelFormat(window->dc, r_ogl_state->pixel_format_index, &r_ogl_state->pixel_format);
+    //- dmylo: os-specific opengl window setup
+    os_window_equip_opengl(handle);
 
     result = r_ogl_handle_from_window(window);
   }
@@ -553,13 +386,6 @@ r_window_unequip(OS_Handle window_handle, R_Handle equip_handle)
   ProfBeginFunction();
   OS_MutexScopeW(r_ogl_state->device_rw_mutex)
   {
-    // dmylo: map os window handle -> hwnd
-    HWND hwnd = {0};
-    {
-      W32_Window *w32_layer_window = w32_window_from_os_window(window_handle);
-      hwnd = w32_hwnd_from_window(w32_layer_window);
-    }
-
     R_OGL_Window *window = r_ogl_window_from_handle(equip_handle);
     window->generation += 1;
 
@@ -572,7 +398,9 @@ r_window_unequip(OS_Handle window_handle, R_Handle equip_handle)
     if(window->geo3d_color)         { gl.DeleteTextures(1, &window->geo3d_color); }
     if(window->geo3d_depth)         { gl.DeleteTextures(1, &window->geo3d_depth); }
 
-    ReleaseDC(hwnd, window->dc);
+    //- dmylo: os-specific opengl window teardown
+    os_window_unequip_opengl(OS_Handle window)
+
     SLLStackPush(r_ogl_state->first_free_window, window);
   }
   ProfEnd();
@@ -824,17 +652,11 @@ r_window_begin_frame(OS_Handle window_handle, R_Handle window_equip)
   ProfBeginFunction();
   OS_MutexScopeW(r_ogl_state->device_rw_mutex)
   {
+    //- dmylo: bind context to the window
+    os_window_bind_opengl_context(window_handle);
+
+    //- dmylo: get opengl window
     R_OGL_Window *window = r_ogl_window_from_handle(window_equip);
-
-    //- dmylo: map os window handle -> hwnd
-    HWND hwnd = {0};
-    {
-      W32_Window *w32_layer_window = w32_window_from_os_window(window_handle);
-      hwnd = w32_hwnd_from_window(w32_layer_window);
-    }
-
-    //- dmylo: bind main context to the window.
-    bool ok = wglMakeCurrent(window->dc, r_ogl_state->glrc);
 
     //- dmylo: get resolution
     Rng2F32 client_rect = os_client_rect_from_window(window_handle);
