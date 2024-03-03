@@ -121,6 +121,9 @@
   {GL_DEPTH_BUFFER_BIT                   0x0100}
   {GL_LESS                               0x0201}
   {GL_GREATER                            0x0204}
+  {GL_TEXTURE_WRAP_S                     0x2802}
+  {GL_TEXTURE_WRAP_T                     0x2803}
+  {GL_CLAMP_TO_EDGE                      0x812F}
 }
 
 //- dmylo: base types

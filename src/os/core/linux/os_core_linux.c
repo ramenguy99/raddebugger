@@ -1309,23 +1309,93 @@ os_file_map_view_close(OS_Handle map, void *ptr)
 //- rjf: directory iteration
 
 internal OS_FileIter *
-os_file_iter_begin(Arena *arena, String8 path, OS_FileIterFlags flags)
+os_file_iter_begin(Arena *arena, String8 path_not_zero_terminated, OS_FileIterFlags flags)
 {
-  NotImplemented;
-  return 0;
+  OS_FileIter *iter = push_array(arena, OS_FileIter, 1);
+  iter->flags = flags;
+  LNX_FileIter *lnx_iter = (LNX_FileIter*)&iter->memory[0];
+
+  Temp scratch = scratch_begin(0, 0);
+  String8 path = push_str8_copy(scratch.arena, path_not_zero_terminated);
+  lnx_iter->dir = opendir((char*)path.str);
+  lnx_iter->fd = dirfd(lnx_iter->dir);
+  scratch_end(scratch);
+  return iter;
 }
 
 internal B32
 os_file_iter_next(Arena *arena, OS_FileIter *iter, OS_FileInfo *info_out)
 {
-  NotImplemented;
-  return 0;
+  B32 result = 0;
+  OS_FileIterFlags flags = iter->flags;
+  LNX_FileIter *lnx_iter = (LNX_FileIter*)&iter->memory[0];
+  DIR *directory = lnx_iter->dir;
+  if (!(flags & OS_FileIterFlag_Done) && directory != 0)
+  {
+    struct dirent *entry;
+    while((entry = readdir(directory)) != NULL)
+    {
+      // check is usable
+      B32 usable_file = 1;
+      
+      char *file_name = entry->d_name;
+      if (file_name[0] == '.')
+      {
+        if (flags & OS_FileIterFlag_SkipHiddenFiles){
+          usable_file = 0;
+        }
+        else if (file_name[1] == 0){
+          usable_file = 0;
+        }
+        else if (file_name[1] == '.' && file_name[2] == 0){
+          usable_file = 0;
+        }
+      }
+      if (entry->d_type == DT_DIR)
+      {
+        if (flags & OS_FileIterFlag_SkipFolders)
+        {
+          usable_file = 0;
+        }
+      }
+      else{
+        if (flags & OS_FileIterFlag_SkipFiles)
+        {
+          usable_file = 0;
+        }
+      }
+      
+      struct stat info = {};
+      if(usable_file) {
+        int stat_result = fstatat(lnx_iter->fd, file_name, &info, 0);
+        if(stat_result != 0) 
+        {
+          usable_file = 0;
+        }
+      }
+
+      // emit if usable
+      if (usable_file)
+      {
+        info_out->name = push_str8_copy(arena, str8_cstring(file_name));
+        lnx_file_properties_from_stat(&info_out->props, &info);
+        result = 1;
+        break;
+      }
+    }
+    
+    if (entry == NULL){
+      iter->flags |= OS_FileIterFlag_Done;
+    }
+  }
+  return result;
 }
 
 internal void
 os_file_iter_end(OS_FileIter *iter)
 {
-  NotImplemented;
+  LNX_FileIter *lnx_iter = (LNX_FileIter*)&iter->memory[0];
+  closedir(lnx_iter->dir);
 }
 
 //- rjf: directory creation

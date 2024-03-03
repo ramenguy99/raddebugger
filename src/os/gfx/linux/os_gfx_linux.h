@@ -24,6 +24,7 @@ struct X11_Window
   Window window;
   OS_WindowRepaintFunctionType *repaint;
   void *repaint_user_data;
+  XIC input_context;
   /*
   WINDOWPLACEMENT last_window_placement;
   F32 dpi;
